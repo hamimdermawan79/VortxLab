@@ -55,10 +55,7 @@ export async function POST(req: Request) {
         const transaction = await tx.transactions.findFirst({
           where: {
             status: 'pending',
-            OR: [
-              { meta_data: { path: ['cashi_order_id'], equals: orderId } },
-              { meta_data: { path: ['bayargg_invoice_id'], equals: orderId } }
-            ]
+            meta_data: { path: ['cashi_order_id'], equals: orderId }
           }
         });
 
