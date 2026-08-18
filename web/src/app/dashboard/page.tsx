@@ -201,8 +201,8 @@ function SortirResultGroup({
                       className="w-full text-center py-1 text-[11px] text-emerald-800 font-semibold hover:underline cursor-pointer"
                     >
                       {showAllAman
-                        ? "▲ Sembunyikan sebagian"
-                        : `▼ Tampilkan semua (${safeAman.length.toLocaleString()} ID)`}
+                        ? "Sembunyikan sebagian"
+                        : `Tampilkan semua (${safeAman.length.toLocaleString()} ID)`}
                     </button>
                   )}
                 </div>
@@ -277,8 +277,8 @@ function SortirResultGroup({
                       className="w-full text-center py-1 text-[11px] text-red-800 font-semibold hover:underline cursor-pointer"
                     >
                       {showAllBanned
-                        ? "▲ Sembunyikan sebagian"
-                        : `▼ Tampilkan semua (${safeBanned.length.toLocaleString()} ID)`}
+                        ? "Sembunyikan sebagian"
+                        : `Tampilkan semua (${safeBanned.length.toLocaleString()} ID)`}
                     </button>
                   )}
                 </div>
@@ -1028,12 +1028,14 @@ function DataExtractorView({
       if (!res.ok) throw new Error(data.message || data.error || "Gagal memproses konfirmasi.");
 
       if (data.status === "completed" && data.results) {
-        setStatus("completed");
-        setCurrentStep(4);
-        setResults(data.results);
-        setTxtOutput(data.txtOutput || "");
-        setDupRemoved(data.dupRemoved || 0);
-        onSuccess(true);
+        setTimeout(() => {
+          setStatus("completed");
+          setCurrentStep(4);
+          setResults(data.results);
+          setTxtOutput(data.txtOutput || "");
+          setDupRemoved(data.dupRemoved || 0);
+          onSuccess(true);
+        }, 400);
       } else {
         // Fallback polling jika diproses background worker
         pollParsingProgress(jobId);
@@ -1173,7 +1175,7 @@ function DataExtractorView({
             }`}
           >
             <span className="font-mono text-[11px]">4.</span>
-            <span className="truncate text-[11px]">Penyusunan .TXT Selesai</span>
+            <span className="truncate text-[11px]">Proses Selesai</span>
           </div>
         </div>
       </div>
@@ -1233,9 +1235,6 @@ function DataExtractorView({
             </h4>
             <p className="text-[11px] text-[#71717a] font-mono mt-0.5">{file?.name}</p>
           </div>
-          <p className="text-[11px] text-[#71717a]">
-            Mengalirkan file ke storage VPS dan memverifikasi isi arsip
-          </p>
         </div>
       )}
 
@@ -1262,11 +1261,8 @@ function DataExtractorView({
 
           <div className="space-y-1">
             <h4 className="text-xs font-semibold text-[#18181b] uppercase tracking-wider">
-              2. Deduplikasi File anda menghindari duplikasi file
+              2. Deduplikasi File anda menghindari File Duplikat
             </h4>
-            <p className="text-[11px] text-[#71717a]">
-              Arsip berhasil dipindai dan file duplikat telah difilter secara otomatis.
-            </p>
           </div>
 
           {/* Price Preview & File Count Box */}
@@ -1335,7 +1331,7 @@ function DataExtractorView({
                     : "bg-black text-white hover:bg-[#27272a]")
                 }
               >
-                {insufficient ? "Saldo Token Tidak Cukup" : "Proses Ekstraksi"}
+                {insufficient ? "Saldo Token Tidak Cukup" : "Proses"}
               </button>
             </div>
           </div>
@@ -1357,7 +1353,7 @@ function DataExtractorView({
         </div>
       )}
 
-      {/* STEP 4: PARSING SELESAI PENYUSUNAN .TXT DAN PENGEMBALIAN KE WEBSITE */}
+      {/* STEP 4: PROSES SELESAI */}
       {currentStep === 4 && (
         <div className="bg-emerald-500/[0.06] border border-emerald-500/25 rounded-xs p-5 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-500/20">
@@ -1367,7 +1363,7 @@ function DataExtractorView({
               </div>
               <div>
                 <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-950">
-                  4. Parsing Selesai Penyusunan .txt dan Pengembalian ke Website
+                  4. Proses Selesai
                 </h4>
                 <p className="text-[11px] text-emerald-800 font-mono">
                   {results.length.toLocaleString()} akun siap diunduh ({dupRemoved.toLocaleString()} duplikat dibersihkan)
@@ -1457,8 +1453,8 @@ function DataExtractorView({
                 className="w-full text-center py-1 text-[11px] text-emerald-900 font-semibold hover:underline cursor-pointer"
               >
                 {showAllResults
-                  ? "▲ Sembunyikan sebagian"
-                  : `▼ Tampilkan semua (${results.length.toLocaleString()} Akun)`}
+                  ? "Sembunyikan sebagian"
+                  : `Tampilkan semua (${results.length.toLocaleString()} Akun)`}
               </button>
             )}
           </div>
