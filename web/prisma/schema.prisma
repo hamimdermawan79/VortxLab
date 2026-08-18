@@ -182,14 +182,15 @@ model api_keys {
   id         String    @id @default(uuid())
   user_id    String
   name       String    @default("Default API Key")
-  key        String    @unique
+  key        String?   @unique
+  key_hash   String?   @unique
   is_active  Boolean   @default(true)
   created_at DateTime  @default(now())
   last_used  DateTime?
 
   profile    profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@index([key])
+  @@index([key_hash])
   @@index([user_id])
 }
 
