@@ -327,6 +327,75 @@ def db_update_extractor_failed(job_id, error_msg):
     finally:
         put_conn(conn)
 
+def extract_ids_from_content(content, min_len=6, max_len=9):
+    """Extract numeric IDs (6-9 digit) dari konten file"""
+    digit_pattern = re.compile(r'\b\d+\b')
+    seen_ids = set()
+    extracted_ids = []
+    for match in digit_pattern.finditer(content):
+        number = match.group()
+        if min_len <= len(number) <= max_len and number not in seen_ids:
+            seen_ids.add(number)
+            extracted_ids.append(number)
+    return extracted_ids
+
+def parse_config_file_improved(content):
+    """
+    Parse konten config sesuai Mode 2 processor.py:
+    - Ekstrak local_mac_addr (jika tidak ada MAC, TIDAK diskip, melainkan mac = 'NO_MAC')
+    - Ekstrak semua hw_account_password_X
+    - Ekstrak semua ID (hw_account_id_X atau angka 6-9 digit)
+    - Buat kombinasi ID x Passwords (1 ID dengan >1 password menghasilkan entri berbeda)
+    """
+    mac_addr = ""
+    passwords = []
+    
+    # 1. Cari MAC Address (tetap valid jika tidak ada)
+    mac_match = re.search(r"local_mac_addr\s*=\s*([A-Fa-f0-9:]+)", content, re.IGNORECASE)
+    if mac_match:
+        mac_addr = mac_match.group(1).strip()
+    else:
+        mac_match2 = re.search(r'local_mac_addr(?:["\']?\s*>\s*|\s*=\s*|\s*:\s*)([^\s<"\']+)', content, re.IGNORECASE)
+        if mac_match2:
+            mac_addr = mac_match2.group(1).strip()
+        else:
+            gen_mac = re.search(r'([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})', content)
+            if gen_mac:
+                mac_addr = gen_mac.group(0).strip()
+
+    # 2. Cari semua password (hw_account_password_0, hw_account_password_1, dst)
+    passwords = re.findall(r"hw_account_password_\d*\s*=\s*([A-Fa-f0-9]+)", content, re.IGNORECASE)
+    if not passwords:
+        passwords = re.findall(r'hw_account_password_\d*(?:["\']?\s*>\s*|\s*=\s*|\s*:\s*)([^\s<"\']+)', content, re.IGNORECASE)
+
+    # 3. Cari account ID eksplisit
+    explicit_ids = re.findall(r"hw_account_id_\d*\s*=\s*(\d+)", content, re.IGNORECASE)
+    if not explicit_ids:
+        explicit_ids = re.findall(r'hw_account_id_\d*(?:["\']?\s*>\s*|\s*=\s*|\s*:\s*)(\d+)', content, re.IGNORECASE)
+
+    # Filter 6-9 digit
+    filtered_explicit = [i for i in explicit_ids if 6 <= len(i) <= 9]
+    if filtered_explicit:
+        account_ids = list(dict.fromkeys(filtered_explicit))
+    else:
+        account_ids = extract_ids_from_content(content, min_len=6, max_len=9)
+
+    # Jika ada ID namun tidak ada field password eksplisit, isi string kosong agar ID tetap diproses
+    if account_ids and not passwords:
+        passwords = [""]
+
+    # 4. Kombinasi ID x Password
+    entries = []
+    for acc_id in account_ids:
+        for pw in passwords:
+            entries.append({
+                "id": str(acc_id),
+                "pw": str(pw),
+                "mac": mac_addr or "NO_MAC"
+            })
+
+    return entries
+
 def process_extractor_task(job_id, file_path):
     try:
         print(f"[Extractor Engine] Streaming & Parsing Zip: {file_path}")
@@ -354,48 +423,36 @@ def process_extractor_task(job_id, file_path):
                         for line in lines:
                             # Match format: ID,PASSWORD,MAC or ID:PASSWORD:MAC or ID----PASSWORD----MAC
                             delims = [',', ':', '----', '|', '\t']
-                            matched_delim = None
                             for d in delims:
                                 if d in line:
                                     parts = [p.strip() for p in line.split(d)]
-                                    if len(parts) >= 2 and re.match(r'^\d{6,10}$', parts[0]):
+                                    if len(parts) >= 2 and re.match(r'^\d{6,9}$', parts[0]):
                                         final_id = parts[0]
                                         final_pw = parts[1] if len(parts) > 1 else ""
-                                        final_mac = parts[2] if len(parts) > 2 else ""
+                                        final_mac = parts[2] if len(parts) > 2 else "NO_MAC"
                                         raw_entries.append({"id": final_id, "pw": final_pw, "mac": final_mac})
                                         file_has_lines = True
                                         break
 
                         if not file_has_lines:
-                            # Fallback to XML/Conf regex extraction
-                            mac_match = re_mac.search(content) or re_generic_mac.search(content)
-                            mac_addr = mac_match.group(1) if (mac_match and hasattr(mac_match, 'group')) else (mac_match.group(0) if mac_match else "")
+                            # Parse config format
+                            extracted = parse_config_file_improved(content)
+                            raw_entries.extend(extracted)
 
-                            passwords = re_pw.findall(content)
-                            account_ids = list(set(re_id.findall(content)))
-
-                            if not account_ids:
-                                account_ids = list(set(re_digits.findall(content)))
-
-                            final_id = account_ids[0] if account_ids else ""
-                            final_pw = passwords[0] if passwords else ""
-                            final_mac = mac_addr
-
-                            if final_id:
-                                raw_entries.append({"id": final_id, "pw": final_pw, "mac": final_mac})
                 except Exception as parse_err:
                     print(f"[Extractor Engine] Error parsing {filename}: {parse_err}")
 
-        # Filter only entries with valid IDs
-        valid_entries = [e for e in raw_entries if e.get("id")]
+        # Filter only entries with valid IDs (6-9 digit)
+        valid_entries = [e for e in raw_entries if e.get("id") and 6 <= len(str(e.get("id"))) <= 9]
         
-        # Deduplicate entries based on ID
-        seen_ids = set()
+        # Deduplicate entries based on (id, pw) combination
+        seen_keys = set()
         unique_entries = []
         dup_removed = 0
         for entry in valid_entries:
-            if entry["id"] not in seen_ids:
-                seen_ids.add(entry["id"])
+            key = (entry["id"], entry.get("pw", ""))
+            if key not in seen_keys:
+                seen_keys.add(key)
                 unique_entries.append(entry)
             else:
                 dup_removed += 1
@@ -442,7 +499,7 @@ def process_extractor_task(job_id, file_path):
                     UPDATE extractor_jobs
                     SET total_conf = %s,
                         total_extracted = %s,
-                        dup_removed = 0,
+                        dup_removed = %s,
                         total_cost = %s,
                         status = 'uploaded',
                         result_data = %s
@@ -450,12 +507,13 @@ def process_extractor_task(job_id, file_path):
                 """, (
                     total_conf,
                     len(shuffled_accounts),
+                    dup_removed,
                     total_cost,
                     psycopg2.extras.Json(shuffled_accounts),
                     job_id
                 ))
             conn.commit()
-            print(f"[Extractor Engine] Job {job_id} Analysis Complete! Conf: {total_conf}, Extracted: {len(shuffled_accounts)}, Cost: {total_cost}")
+            print(f"[Extractor Engine] Job {job_id} Analysis Complete! Conf: {total_conf}, Extracted: {len(shuffled_accounts)}, Dup Removed: {dup_removed}, Cost: {total_cost}")
         except Exception as e:
             conn.rollback()
             print(f"[Extractor Engine] Database update error: {e}")
