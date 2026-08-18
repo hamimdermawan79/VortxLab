@@ -24,13 +24,51 @@ import psycopg2.extras
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # =================== SETTINGS & CONFIG ===================
-DB_CONFIG = {
-    "host": os.getenv("DB_HOST", "localhost"),
-    "port": int(os.getenv("DB_PORT", 5432)),
-    "dbname": os.getenv("DB_NAME", "vortx_db"),
-    "user": os.getenv("DB_USER", "postgres"),
-    "password": os.getenv("DB_PASSWORD", "vortx_password123")
-}
+def load_env_file():
+    env_paths = [
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", ".env"),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", ".env.local"),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+    ]
+    for p in env_paths:
+        if os.path.exists(p):
+            with open(p, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip().strip('"').strip("'")
+                        if k not in os.environ:
+                            os.environ[k] = v
+
+load_env_file()
+
+def parse_db_config():
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        try:
+            from urllib.parse import urlparse, unquote
+            parsed = urlparse(db_url)
+            return {
+                "host": parsed.hostname or "localhost",
+                "port": parsed.port or 5432,
+                "dbname": (parsed.path or "/vortx_db").lstrip("/"),
+                "user": unquote(parsed.username) if parsed.username else "postgres",
+                "password": unquote(parsed.password) if parsed.password else ""
+            }
+        except Exception as e:
+            print(f"[Worker] Warning: Failed to parse DATABASE_URL: {e}")
+
+    return {
+        "host": os.getenv("DB_HOST", "localhost"),
+        "port": int(os.getenv("DB_PORT", 5432)),
+        "dbname": os.getenv("DB_NAME", "vortx_db"),
+        "user": os.getenv("DB_USER", "postgres"),
+        "password": os.getenv("DB_PASSWORD", "vortx_password123")
+    }
+
+DB_CONFIG = parse_db_config()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
@@ -57,7 +95,7 @@ def init_db_pool():
     global db_pool
     try:
         db_pool = psycopg2.pool.ThreadedConnectionPool(4, 30, **DB_CONFIG)
-        print("[Worker] PostgreSQL Connection Pool initialized successfully.")
+        print(f"[Worker] PostgreSQL Connection Pool initialized successfully (User: {DB_CONFIG['user']}, DB: {DB_CONFIG['dbname']}).")
     except Exception as e:
         print(f"[Worker] ERROR: Could not connect to PostgreSQL: {e}")
 

@@ -1,21 +1,57 @@
+import os
 import time
 import json
 import requests
+from urllib.parse import urlparse, unquote
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import psycopg2
 import psycopg2.pool
 import psycopg2.extras
 
-# MASTER SETTINGS
-DB_CONFIG = {
-    "host": "localhost",
-    "port": 5432,
-    "dbname": "vortx_db",
-    "user": "postgres",
-    "password": "vortx_password123"
-}
+def load_env_file():
+    env_paths = [
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", ".env"),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", ".env.local"),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+    ]
+    for p in env_paths:
+        if os.path.exists(p):
+            with open(p, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip().strip('"').strip("'")
+                        if k not in os.environ:
+                            os.environ[k] = v
 
+load_env_file()
+
+def parse_db_config():
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        try:
+            parsed = urlparse(db_url)
+            return {
+                "host": parsed.hostname or "localhost",
+                "port": parsed.port or 5432,
+                "dbname": (parsed.path or "/vortx_db").lstrip("/"),
+                "user": unquote(parsed.username) if parsed.username else "postgres",
+                "password": unquote(parsed.password) if parsed.password else ""
+            }
+        except Exception:
+            pass
+    return {
+        "host": os.getenv("DB_HOST", "localhost"),
+        "port": int(os.getenv("DB_PORT", 5432)),
+        "dbname": os.getenv("DB_NAME", "vortx_db"),
+        "user": os.getenv("DB_USER", "postgres"),
+        "password": os.getenv("DB_PASSWORD", "vortx_password123")
+    }
+
+DB_CONFIG = parse_db_config()
 db_pool = psycopg2.pool.ThreadedConnectionPool(2, 15, **DB_CONFIG)
 
 def get_conn():
