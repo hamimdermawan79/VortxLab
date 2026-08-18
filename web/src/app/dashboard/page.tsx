@@ -467,6 +467,24 @@ function SortirBannedView({
     }
   };
 
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result;
+      if (typeof text === "string") {
+        setRawInput(text);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handleCancelJob = async (activityId: string) => {
     if (!confirm("Apakah Anda yakin ingin membatalkan proses sortir ini? Saldo token akan dikembalikan."))
       return;
@@ -563,18 +581,33 @@ function SortirBannedView({
                 Input ID Akun Target
               </span>
               <label className="cursor-pointer text-xs flex items-center gap-1.5 px-3 py-1.5 bg-[#fafafa] border border-[#e4e4e7] rounded-xs text-black hover:bg-[#f4f4f5] transition-colors font-medium shadow-2xs">
-                <Upload size={13} /> Upload File (.TXT / .CSV)
+                <Upload size={13} /> Drag & Drop / Upload (.TXT / .CSV)
                 <input type="file" accept=".txt,.csv" className="hidden" onChange={handleFileUpload} />
               </label>
             </div>
 
-            <textarea
-              value={rawInput}
-              onChange={(e) => setRawInput(e.target.value)}
-              rows={6}
-              placeholder="Paste ID target disini, satu per baris atau dipisahkan koma..."
-              className="w-full bg-white border border-[#e4e4e7] rounded-xs px-4 py-3 text-xs font-mono text-[#18181b] outline-none focus:border-black resize-none placeholder:text-[#a1a1aa] transition-all font-normal"
-            />
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+              }}
+              onDrop={handleFileDrop}
+              className={`transition-all rounded-xs ${
+                isDragging ? "ring-2 ring-black bg-emerald-500/5" : ""
+              }`}
+            >
+              <textarea
+                value={rawInput}
+                onChange={(e) => setRawInput(e.target.value)}
+                rows={6}
+                placeholder="Paste ID target disini, satu per baris atau dipisahkan koma (atau drag & drop file .txt / .csv disini)..."
+                className="w-full bg-white border border-[#e4e4e7] rounded-xs px-4 py-3 text-xs font-mono text-[#18181b] outline-none focus:border-black resize-none placeholder:text-[#a1a1aa] transition-all font-normal"
+              />
+            </div>
 
             {/* Spec Box Matrix Style */}
             <div className="bg-[#fafafa] border border-[#e4e4e7] rounded-xs p-3.5">
@@ -847,13 +880,21 @@ function DataExtractorView({
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<Status>("idle");
-  const [currentStep, setCurrentStep] = useState<number>(1);
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
   const [error, setError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<{
+    totalConf: number;
+    totalCost: number;
+    costPerConf: number;
+    fileName: string;
+  } | null>(null);
   const [results, setResults] = useState<any[]>([]);
+  const [txtOutput, setTxtOutput] = useState<string>("");
+  const [dupRemoved, setDupRemoved] = useState<number>(0);
   const [copiedTxt, setCopiedTxt] = useState(false);
   const [showAllResults, setShowAllResults] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const intervalRef = useRef<any>(null);
 
   useEffect(() => {
@@ -862,60 +903,57 @@ function DataExtractorView({
     };
   }, []);
 
-  const pollAnalysis = (id: string) => {
+  // Poll background parsing completion (Step 3 -> Step 4)
+  const pollParsingProgress = (id: string) => {
     if (intervalRef.current) clearInterval(intervalRef.current);
-    setCurrentStep(2); // Step 2: Menganalisis file zip & ekstrak ID/PW
     intervalRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`/api/extractor?jobId=${id}`);
+        const res = await fetch(`/api/extractor?jobId=${id}&t=${Date.now()}`, { cache: "no-store" });
         const data = await res.json();
-        if (data.status === "uploaded") {
+        if (data.status === "completed") {
           clearInterval(intervalRef.current);
-          setStats({
-            totalConf: data.totalConf,
-            totalExtracted: data.totalExtracted,
-            dupRemoved: data.dupRemoved || 0,
-            totalCost: data.totalCost,
-          });
-          setCurrentStep(3); // Step 3: Siap konfirmasi & bayar
-          setStatus("idle");
+          setStatus("completed");
+          setCurrentStep(4);
+          setResults(data.results || []);
+          setTxtOutput(data.txtOutput || "");
+          setDupRemoved(data.dupRemoved || 0);
+          onSuccess(true);
         } else if (data.status === "failed") {
           clearInterval(intervalRef.current);
           setStatus("idle");
-          setCurrentStep(1);
-          setError(data.error || "Gagal menganalisis file .zip.");
-          setFile(null);
+          setCurrentStep(2);
+          setError(data.error || "Gagal melakukan proses parsing pada data lokal.");
         }
       } catch (err) {}
     }, 1500);
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
+  const processUploadFile = async (f: File) => {
     if (!f.name.toLowerCase().endsWith(".zip")) {
-      setError("Hanya file .zip yang didukung");
+      setError("Hanya file arsip .zip yang didukung.");
       return;
     }
     if (f.size > 500 * 1024 * 1024) {
-      setError("Maksimal ukuran file adalah 500MB");
+      setError("Maksimal ukuran file adalah 500MB.");
       return;
     }
 
     setError(null);
     setFile(f);
     setStatus("uploading");
-    setCurrentStep(1);
+    setCurrentStep(1); // Step 1: Uploading File
     setStats(null);
+    setResults([]);
+
     try {
-      // Direct binary streaming upload: Bypass Next.js FormData 10MB limit
+      // Direct binary streaming upload ke VPS storage
       const res = await fetch("/api/extractor", {
         method: "POST",
         headers: {
           "Content-Type": "application/octet-stream",
           "X-Filename": encodeURIComponent(f.name),
         },
-        body: f, // Raw File stream
+        body: f,
       });
 
       let data: any = {};
@@ -924,13 +962,21 @@ function DataExtractorView({
       } catch {
         throw new Error(
           res.status === 413
-            ? "Ukuran file terlalu besar (melebihi limit upload Cloudflare/server 100MB)"
-            : `Gagal mengunggah file ke server (HTTP ${res.status})`
+            ? "Ukuran file melebihi limit upload server/Cloudflare 100MB."
+            : `Gagal mengunggah file ke server (HTTP ${res.status}).`
         );
       }
-      if (!res.ok) throw new Error(data.message || data.error || `Upload gagal (HTTP ${res.status})`);
+      if (!res.ok) throw new Error(data.message || data.error || `Upload gagal (HTTP ${res.status}).`);
+
       setJobId(data.jobId);
-      pollAnalysis(data.jobId);
+      setStats({
+        totalConf: data.totalConf,
+        totalCost: data.totalCost,
+        costPerConf: data.costPerConf || 5,
+        fileName: data.fileName || f.name,
+      });
+      setStatus("idle");
+      setCurrentStep(2); // Step 2: Deduplikasi File & Konfirmasi Biaya
     } catch (err: any) {
       setError(err.message || "Gagal memproses file upload.");
       setStatus("idle");
@@ -939,9 +985,39 @@ function DataExtractorView({
     }
   };
 
-  const handleConfirm = async () => {
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) processUploadFile(f);
+    e.target.value = "";
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) processUploadFile(f);
+  };
+
+  // Step 2 -> Step 3: User approves & pays
+  const handleApproveProcess = async () => {
     if (!jobId) return;
     setStatus("processing");
+    setCurrentStep(3); // Step 3: Melakukan Proses Parsing Pada local_data Anda
+    setError(null);
+
     try {
       const res = await fetch("/api/extractor/confirm", {
         method: "POST",
@@ -949,45 +1025,66 @@ function DataExtractorView({
         body: JSON.stringify({ jobId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || data.error || "Gagal konfirmasi");
+      if (!res.ok) throw new Error(data.message || data.error || "Gagal memproses konfirmasi.");
 
-      // Fetch completed results
-      const resData = await fetch(`/api/extractor?jobId=${jobId}`);
-      const jobData = await resData.json();
-
-      setStatus("completed");
-      setCurrentStep(4);
-      setResults(jobData.results || []);
-      onSuccess(true);
+      // Mulai polling hasil parsing offline worker
+      pollParsingProgress(jobId);
     } catch (err: any) {
       setError(err.message);
       setStatus("idle");
+      setCurrentStep(2);
     }
   };
 
-  // Format standard output sesuai processor.py: ID: ... PW: ... MAC: ...
-  const generateStandardTxt = () => {
+  // User cancels
+  const handleCancelProcess = async () => {
+    if (!jobId) {
+      handleReset();
+      return;
+    }
+    try {
+      await fetch(`/api/extractor?jobId=${jobId}`, { method: "DELETE" });
+    } catch {}
+    handleReset();
+  };
+
+  const handleReset = () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    setFile(null);
+    setStats(null);
+    setResults([]);
+    setTxtOutput("");
+    setJobId(null);
+    setStatus("idle");
+    setCurrentStep(1);
+    setError(null);
+  };
+
+  // Output standard format: ID: ... PW: ... MAC: ...
+  const getStandardTxt = () => {
+    if (txtOutput) return txtOutput;
     return results
       .map(
         (r) =>
-          `ID: ${r.id || ""} PW: ${r.pw || r.password || ""} MAC: ${
-            r.mac && r.mac !== "NO_MAC" ? r.mac : ""
+          `ID: ${r.id || ""} PW: ${r.pw || r.password || ""}${
+            r.mac && r.mac !== "NO_MAC" ? ` MAC: ${r.mac}` : ""
           }`.trim()
       )
       .join("\n");
   };
 
   const handleCopyAll = () => {
-    if (results.length === 0) return;
-    navigator.clipboard.writeText(generateStandardTxt());
+    const text = getStandardTxt();
+    if (!text) return;
+    navigator.clipboard.writeText(text);
     setCopiedTxt(true);
     setTimeout(() => setCopiedTxt(false), 2000);
   };
 
   const downloadExtractedTxt = () => {
-    if (results.length === 0) return;
-    const txt = generateStandardTxt();
-    const blob = new Blob([txt], { type: "text/plain;charset=utf-8;" });
+    const text = getStandardTxt();
+    if (!text) return;
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `vortx_extracted_${jobId ? jobId.slice(0, 6) : "data"}.txt`;
@@ -1012,26 +1109,16 @@ function DataExtractorView({
     a.click();
   };
 
-  const handleReset = () => {
-    setFile(null);
-    setStats(null);
-    setResults([]);
-    setJobId(null);
-    setStatus("idle");
-    setCurrentStep(1);
-    setError(null);
-  };
-
   const insufficient = stats ? userBalance < stats.totalCost : false;
   const previewItems = showAllResults ? results : results.slice(0, 20);
 
   return (
-    <div className="space-y-5">
-      {/* Visual Stepper Bar */}
-      <div className="bg-white border border-[#e4e4e7] rounded-xs p-4 shadow-2xs">
-        <div className="grid grid-cols-4 gap-2 text-center text-xs">
+    <div className="space-y-4">
+      {/* 4-Step Simplified Stepper */}
+      <div className="bg-white border border-[#e4e4e7] rounded-xs p-3.5 shadow-2xs">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
           <div
-            className={`flex flex-col items-center gap-1.5 p-2 rounded-xs transition-colors ${
+            className={`p-2 rounded-xs flex items-center gap-2 transition-all ${
               currentStep === 1
                 ? "bg-black text-white font-semibold"
                 : currentStep > 1
@@ -1039,14 +1126,12 @@ function DataExtractorView({
                 : "bg-[#fafafa] text-[#71717a]"
             }`}
           >
-            <div className="flex items-center gap-1">
-              {currentStep > 1 ? <CheckCircle2 size={13} /> : <span className="font-mono">1.</span>}
-              <span className="text-[11px] uppercase tracking-wider">Upload File</span>
-            </div>
+            <span className="font-mono text-[11px]">1.</span>
+            <span className="truncate text-[11px]">Uploading File</span>
           </div>
 
           <div
-            className={`flex flex-col items-center gap-1.5 p-2 rounded-xs transition-colors ${
+            className={`p-2 rounded-xs flex items-center gap-2 transition-all ${
               currentStep === 2
                 ? "bg-black text-white font-semibold"
                 : currentStep > 2
@@ -1054,14 +1139,12 @@ function DataExtractorView({
                 : "bg-[#fafafa] text-[#71717a]"
             }`}
           >
-            <div className="flex items-center gap-1">
-              {currentStep > 2 ? <CheckCircle2 size={13} /> : <span className="font-mono">2.</span>}
-              <span className="text-[11px] uppercase tracking-wider">Ekstraksi Engine</span>
-            </div>
+            <span className="font-mono text-[11px]">2.</span>
+            <span className="truncate text-[11px]">Deduplikasi File</span>
           </div>
 
           <div
-            className={`flex flex-col items-center gap-1.5 p-2 rounded-xs transition-colors ${
+            className={`p-2 rounded-xs flex items-center gap-2 transition-all ${
               currentStep === 3
                 ? "bg-black text-white font-semibold"
                 : currentStep > 3
@@ -1069,23 +1152,19 @@ function DataExtractorView({
                 : "bg-[#fafafa] text-[#71717a]"
             }`}
           >
-            <div className="flex items-center gap-1">
-              {currentStep > 3 ? <CheckCircle2 size={13} /> : <span className="font-mono">3.</span>}
-              <span className="text-[11px] uppercase tracking-wider">Konfirmasi Biaya</span>
-            </div>
+            <span className="font-mono text-[11px]">3.</span>
+            <span className="truncate text-[11px]">Proses Parsing Local</span>
           </div>
 
           <div
-            className={`flex flex-col items-center gap-1.5 p-2 rounded-xs transition-colors ${
+            className={`p-2 rounded-xs flex items-center gap-2 transition-all ${
               currentStep === 4
                 ? "bg-emerald-600 text-white font-semibold"
                 : "bg-[#fafafa] text-[#71717a]"
             }`}
           >
-            <div className="flex items-center gap-1">
-              <span className="font-mono">4.</span>
-              <span className="text-[11px] uppercase tracking-wider">Unduh Hasil</span>
-            </div>
+            <span className="font-mono text-[11px]">4.</span>
+            <span className="truncate text-[11px]">Penyusunan .TXT Selesai</span>
           </div>
         </div>
       </div>
@@ -1097,138 +1176,126 @@ function DataExtractorView({
         </div>
       )}
 
-      {/* STEP 1: INITIAL UPLOAD BOX */}
-      {status === "idle" && !stats && results.length === 0 && (
-        <div className="border-2 border-dashed border-[#e4e4e7] hover:border-black rounded-xs p-10 text-center transition-all bg-[#fafafa]">
+      {/* STEP 1: UPLOADING FILE & DRAG AND DROP ZONE */}
+      {currentStep === 1 && status !== "uploading" && (
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={`border-2 border-dashed rounded-xs p-10 text-center transition-all cursor-pointer ${
+            isDragging
+              ? "border-black bg-emerald-500/10 scale-[0.99]"
+              : "border-[#e4e4e7] hover:border-black bg-[#fafafa]"
+          }`}
+        >
           <input
             type="file"
             accept=".zip"
-            onChange={handleFileUpload}
+            onChange={handleFileInputChange}
             className="hidden"
-            id="extractor-upload"
+            id="extractor-file-input"
           />
-          <label htmlFor="extractor-upload" className="cursor-pointer flex flex-col items-center gap-3">
+          <label htmlFor="extractor-file-input" className="cursor-pointer flex flex-col items-center gap-3">
             <div className="p-3 bg-white border border-[#e4e4e7] rounded-xs shadow-2xs">
-              <FolderArchive size={32} className="text-black" />
+              <Upload size={30} className="text-black" />
             </div>
             <div className="space-y-1">
               <span className="text-xs font-semibold text-[#18181b] uppercase tracking-wider block">
-                Pilih File .ZIP Arsip Game / Akun
+                Drag & Drop atau Pilih File .ZIP
               </span>
               <span className="text-[11px] text-[#71717a] block">
-                Maksimal 500MB • Engine Mode Precheck Offline (Regex 6-9 Digit, Multi-PW, Shuffler Anti-Ban)
+                Maksimal 500MB • Mode Precheck Offline (Ekstraksi .conf, ID 6-9 digit & Multi-Password)
               </span>
             </div>
             <span className="mt-2 text-xs px-4 py-2 bg-black text-white rounded-xs font-medium uppercase tracking-wider hover:bg-[#27272a] shadow-2xs">
-              Pilih File ZIP
+              Pilih File .ZIP
             </span>
           </label>
         </div>
       )}
 
-      {/* STEP 2: LIVE EXTRACTION PROGRESS & STEP-BY-STEP FEEDBACK */}
-      {(status === "uploading" || currentStep === 2) && (
-        <div className="bg-white border border-[#e4e4e7] rounded-xs p-6 shadow-xs space-y-4">
-          <div className="flex items-center gap-3">
-            <Loader2 className="animate-spin text-black" size={22} />
-            <div>
-              <h4 className="text-xs font-semibold text-[#18181b] uppercase tracking-wider">
-                Sedang Memproses Arsip ZIP
-              </h4>
-              <p className="text-[11px] text-[#71717a] font-mono">{file?.name}</p>
-            </div>
+      {/* STEP 1 LOADING: FILE UPLOADING TO VPS */}
+      {status === "uploading" && (
+        <div className="bg-white border border-[#e4e4e7] rounded-xs p-8 text-center space-y-3 shadow-xs">
+          <Loader2 className="animate-spin text-black mx-auto" size={26} />
+          <div>
+            <h4 className="text-xs font-semibold text-[#18181b] uppercase tracking-wider">
+              1. Uploading File ke Server...
+            </h4>
+            <p className="text-[11px] text-[#71717a] font-mono mt-0.5">{file?.name}</p>
           </div>
-
-          <div className="space-y-2.5 pt-2 border-t border-[#e4e4e7] text-xs">
-            <div className="flex items-center gap-2 text-emerald-800">
-              <CheckCircle2 size={14} className="text-emerald-600" />
-              <span>1. File berhasil diunggah ke disk server</span>
-            </div>
-            <div className="flex items-center gap-2 text-black font-medium">
-              <Loader2 size={14} className="animate-spin text-black" />
-              <span>2. Engine sedang mengekstrak file .conf, ID (6-9 digit), dan multi-password...</span>
-            </div>
-            <div className="flex items-center gap-2 text-[#a1a1aa]">
-              <span className="w-3.5 h-3.5 rounded-full border border-[#d4d4d8] flex items-center justify-center text-[9px]">
-                3
-              </span>
-              <span>3. Pengecekan & penghapusan duplikasi ID</span>
-            </div>
-            <div className="flex items-center gap-2 text-[#a1a1aa]">
-              <span className="w-3.5 h-3.5 rounded-full border border-[#d4d4d8] flex items-center justify-center text-[9px]">
-                4
-              </span>
-              <span>4. Pengelompokan MAC address & rotasi anti-ban</span>
-            </div>
-          </div>
+          <p className="text-[11px] text-[#71717a]">
+            Mengalirkan file ke storage VPS dan memverifikasi isi arsip
+          </p>
         </div>
       )}
 
-      {/* STEP 3: PRE-CHECK SUMMARY & COST CONFIRMATION */}
-      {status === "idle" && stats && results.length === 0 && (
+      {/* STEP 2: DEDUPLIKASI FILE & KONFIRMASI BIAYA */}
+      {currentStep === 2 && stats && (
         <div className="bg-white border border-[#e4e4e7] rounded-xs p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-[#e4e4e7] pb-3">
             <div className="flex items-center gap-2">
               <FolderArchive size={16} className="text-black" />
               <span className="text-xs font-semibold text-[#18181b] truncate max-w-sm">
-                {file?.name}
+                {stats.fileName}
               </span>
               <span className="text-[10px] text-[#71717a] font-mono">
                 ({file ? (file.size / (1024 * 1024)).toFixed(2) : 0} MB)
               </span>
             </div>
             <button
-              onClick={handleReset}
+              onClick={handleCancelProcess}
               className="text-xs text-red-600 font-medium hover:underline cursor-pointer"
             >
-              Ganti File
+              Batal
             </button>
           </div>
 
-          {/* Precheck Matrix */}
+          <div className="space-y-1">
+            <h4 className="text-xs font-semibold text-[#18181b] uppercase tracking-wider">
+              2. Deduplikasi File anda menghindari duplikasi file
+            </h4>
+            <p className="text-[11px] text-[#71717a]">
+              Arsip berhasil dipindai dan file duplikat telah difilter secara otomatis.
+            </p>
+          </div>
+
+          {/* Price Preview & File Count Box */}
           <div className="bg-[#fafafa] border border-[#e4e4e7] rounded-xs p-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center divide-y sm:divide-y-0 sm:divide-x divide-[#e4e4e7]">
-              <div className="pt-2 sm:pt-0">
+            <div className="grid grid-cols-3 gap-2 text-center divide-x divide-[#e4e4e7]">
+              <div>
                 <p className="text-[10px] font-medium uppercase tracking-wider text-[#71717a] mb-0.5">
-                  TOTAL .CONF
+                  FILE VALID (.CONF)
                 </p>
-                <p className="text-xs font-semibold font-mono text-[#18181b]">
+                <p className="text-sm font-semibold font-mono text-emerald-700">
                   {stats.totalConf.toLocaleString()} File
                 </p>
               </div>
-              <div className="pt-2 sm:pt-0">
+              <div>
                 <p className="text-[10px] font-medium uppercase tracking-wider text-[#71717a] mb-0.5">
-                  AKUN VALID (6-9 DIGIT)
+                  TARIF PER FILE
                 </p>
-                <p className="text-xs font-semibold font-mono text-emerald-700">
-                  {stats.totalExtracted.toLocaleString()} Akun
+                <p className="text-sm font-semibold font-mono text-[#18181b]">
+                  {stats.costPerConf} Token
                 </p>
               </div>
-              <div className="pt-2 sm:pt-0">
+              <div>
                 <p className="text-[10px] font-medium uppercase tracking-wider text-[#71717a] mb-0.5">
-                  DUPLIKAT DIHAPUS
-                </p>
-                <p className="text-xs font-semibold font-mono text-[#18181b]">
-                  {stats.dupRemoved.toLocaleString()} Duplikat
-                </p>
-              </div>
-              <div className="pt-2 sm:pt-0">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-[#71717a] mb-0.5">
-                  BIAYA TOKEN
+                  TOTAL BIAYA
                 </p>
                 <p
                   className={
-                    "text-xs font-semibold font-mono " +
+                    "text-sm font-semibold font-mono " +
                     (insufficient ? "text-red-600" : "text-black")
                   }
                 >
-                  {stats.totalCost.toLocaleString()} token
+                  {stats.totalCost.toLocaleString()} Token
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
             <div className="text-xs text-[#71717a]">
               Saldo Anda:{" "}
               <span
@@ -1240,28 +1307,52 @@ function DataExtractorView({
               </span>
             </div>
 
-            <button
-              onClick={handleConfirm}
-              disabled={insufficient || stats.totalExtracted === 0}
-              className={
-                "w-full sm:w-auto px-6 py-2.5 text-xs font-medium rounded-xs transition-all uppercase tracking-wider cursor-pointer shadow-2xs " +
-                (insufficient || stats.totalExtracted === 0
-                  ? "bg-red-50 text-red-600 border border-red-200 cursor-not-allowed"
-                  : "bg-black text-white hover:bg-[#27272a]")
-              }
-            >
-              {insufficient
-                ? "Saldo Token Tidak Cukup"
-                : stats.totalExtracted === 0
-                ? "Tidak Ada Akun Valid"
-                : "Bayar & Ambil Hasil Ekstraksi"}
-            </button>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={handleCancelProcess}
+                className="w-1/2 sm:w-auto px-4 py-2 bg-white border border-[#e4e4e7] text-xs font-medium rounded-xs hover:bg-[#fafafa] cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleApproveProcess}
+                disabled={insufficient || stats.totalConf === 0}
+                className={
+                  "w-1/2 sm:w-auto px-6 py-2 text-xs font-medium rounded-xs transition-all uppercase tracking-wider cursor-pointer shadow-2xs " +
+                  (insufficient || stats.totalConf === 0
+                    ? "bg-red-50 text-red-600 border border-red-200 cursor-not-allowed"
+                    : "bg-black text-white hover:bg-[#27272a]")
+                }
+              >
+                {insufficient ? "Saldo Token Tidak Cukup" : "Proses Ekstraksi"}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* STEP 4: EXTRACTION COMPLETE & RESULT EXPORT (SEPERTI PROCESSOR.PY) */}
-      {status === "completed" && (
+      {/* STEP 3: MELAKUKAN PROSES PARSING PADA LOCAL DATA ANDA */}
+      {currentStep === 3 && (
+        <div className="bg-white border border-[#e4e4e7] rounded-xs p-8 text-center space-y-4 shadow-xs">
+          <Loader2 className="animate-spin text-black mx-auto" size={28} />
+          <div className="space-y-1">
+            <h4 className="text-xs font-semibold text-[#18181b] uppercase tracking-wider">
+              3. Melakukan Proses Parsing Pada local_data Anda...
+            </h4>
+            <p className="text-[11px] text-[#71717a]">
+              Engine offline sedang mengekstrak ID akun (6-9 digit), multi-password, dan informasi MAC secara lokal di storage VPS.
+            </p>
+          </div>
+          <div className="text-[10px] font-mono text-[#a1a1aa] bg-[#fafafa] p-2 rounded-xs border border-[#e4e4e7] max-w-xs mx-auto">
+            Mode: 100% Offline Processing
+          </div>
+        </div>
+      )}
+
+      {/* STEP 4: PARSING SELESAI PENYUSUNAN .TXT DAN PENGEMBALIAN KE WEBSITE */}
+      {currentStep === 4 && (
         <div className="bg-emerald-500/[0.06] border border-emerald-500/25 rounded-xs p-5 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-500/20">
             <div className="flex items-center gap-3">
@@ -1270,10 +1361,10 @@ function DataExtractorView({
               </div>
               <div>
                 <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-950">
-                  Ekstraksi Berhasil Selesai!
+                  4. Parsing Selesai Penyusunan .txt dan Pengembalian ke Website
                 </h4>
                 <p className="text-[11px] text-emerald-800 font-mono">
-                  {results.length.toLocaleString()} akun siap diunduh (Format Standar ID / PW / MAC)
+                  {results.length.toLocaleString()} akun siap diunduh ({dupRemoved.toLocaleString()} duplikat dibersihkan)
                 </p>
               </div>
             </div>
@@ -1290,7 +1381,7 @@ function DataExtractorView({
                   </>
                 ) : (
                   <>
-                    <Copy size={12} /> Salin Format TXT
+                    <Copy size={12} /> Salin Format .TXT
                   </>
                 )}
               </button>
@@ -1338,8 +1429,13 @@ function DataExtractorView({
                 >
                   <span className="truncate">
                     ID: <span className="font-bold">{r.id}</span> PW:{" "}
-                    <span className="text-emerald-800">{r.pw || r.password || "-"}</span> MAC:{" "}
-                    <span className="text-[#71717a]">{r.mac && r.mac !== "NO_MAC" ? r.mac : "-"}</span>
+                    <span className="text-emerald-800">{r.pw || r.password || "-"}</span>
+                    {r.mac && r.mac !== "NO_MAC" && (
+                      <>
+                        {" "}
+                        MAC: <span className="text-[#71717a]">{r.mac}</span>
+                      </>
+                    )}
                   </span>
                   <span className="text-[9px] text-emerald-700/60 font-sans ml-2 shrink-0">
                     #{idx + 1}

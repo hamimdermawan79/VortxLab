@@ -1,25 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { mkdir, writeFile } from 'fs/promises';
+import { mkdir, writeFile, unlink } from 'fs/promises';
 import { createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import { Readable } from 'stream';
 import path from 'path';
+import AdmZip from 'adm-zip';
 import { getUser } from '@/utils/auth';
 import { prisma } from '@/utils/prisma';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 120; // 2 minutes timeout for large file processing
+export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
   try {
     const user = await getUser();
     if (!user) return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
 
-    // Auto-cleanup abandoned 'uploaded' or 'pending_analysis' jobs
+    // Auto-cleanup abandoned 'pending_confirmation' jobs for this user
     await prisma.extractor_jobs.deleteMany({
       where: {
         user_id: user.id,
-        status: { in: ['uploaded', 'pending_analysis', 'processing_analysis'] }
+        status: { in: ['pending_confirmation', 'uploaded'] }
       }
     });
 
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
     let filename = `archive_${timestamp}.zip`;
     let savePath = path.resolve(saveDir, filename);
 
-    // MODE 1: Direct Binary Stream (Bypasses Next.js 10MB FormData limits, zero memory leak)
+    // MODE 1: Direct Binary Stream (Preferred, bypasses FormData limits)
     if (contentType.includes('application/octet-stream') || req.headers.get('x-filename')) {
       const headerName = req.headers.get('x-filename');
       if (headerName) {
@@ -72,24 +73,70 @@ export async function POST(req: NextRequest) {
       await writeFile(savePath, buffer);
     }
 
-    // Create job record for Python worker to process
+    // Step 2 Server Precheck: Scan valid .conf files & deduplicate identical filenames in ZIP
+    let totalConf = 0;
+    try {
+      const zip = new AdmZip(savePath);
+      const entries = zip.getEntries();
+      const confNames = new Set<string>();
+
+      for (const entry of entries) {
+        if (!entry.isDirectory && !entry.entryName.startsWith('__MACOSX') && !entry.entryName.endsWith('.DS_Store')) {
+          const lower = entry.entryName.toLowerCase();
+          if (lower.endsWith('.conf') || lower.endsWith('.txt') || lower.endsWith('.dat')) {
+            confNames.add(path.basename(entry.entryName));
+          }
+        }
+      }
+      totalConf = confNames.size;
+    } catch (zipErr: any) {
+      console.error('ZIP read error:', zipErr);
+      return NextResponse.json({ error: 'INVALID_ZIP', message: 'File .zip rusak atau tidak dapat dibaca.' }, { status: 400 });
+    }
+
+    if (totalConf === 0) {
+      return NextResponse.json({
+        error: 'NO_CONF_FILES',
+        message: 'Tidak ditemukan file konfigurasi (.conf) yang valid dalam arsip .zip ini.'
+      }, { status: 400 });
+    }
+
+    // Fetch cost per file config (default: 5 token per .conf)
+    let costPerConf = 5;
+    try {
+      const cfg = await prisma.service_configs.findUnique({
+        where: { service_type: 'data-extractor' }
+      });
+      if (cfg && cfg.cost_per_id) {
+        costPerConf = cfg.cost_per_id;
+      }
+    } catch {}
+
+    const totalCost = totalConf * costPerConf;
+
+    // Create job in 'pending_confirmation' state (Awaiting user approval & payment)
     const job = await prisma.extractor_jobs.create({
       data: {
         user_id: user.id,
         original_name: filename,
-        total_conf: 0,
+        total_conf: totalConf,
         total_extracted: 0,
         dup_removed: 0,
-        total_cost: 0,
-        status: 'pending_analysis',
-        result_data: { file_path: savePath }
+        total_cost: totalCost,
+        status: 'pending_confirmation',
+        result_data: { file_path: savePath, total_conf: totalConf }
       }
     });
 
     return NextResponse.json({
       success: true,
       jobId: job.id,
-      message: 'File berhasil diunggah. Engine Python sedang memproses analisis...'
+      fileName: filename,
+      totalConf,
+      totalCost,
+      costPerConf,
+      status: 'pending_confirmation',
+      message: 'Deduplikasi file selesai. Menunggu konfirmasi proses ekstraksi.'
     });
 
   } catch (err: any) {
@@ -120,11 +167,54 @@ export async function GET(req: NextRequest) {
       totalExtracted: job.total_extracted,
       dupRemoved: job.dup_removed,
       totalCost: job.total_cost,
-      results: job.status === 'completed' && Array.isArray(rawData) ? rawData : null,
+      results: job.status === 'completed' && Array.isArray(rawData?.entries) ? rawData.entries : (Array.isArray(rawData) ? rawData : null),
+      txtOutput: rawData?.txt_output || null,
       error: rawData?.error || null
     });
   } catch (err: any) {
     console.error('Extractor poll error:', err);
     return NextResponse.json({ error: 'POLLING_ERROR' }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const user = await getUser();
+    if (!user) return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
+
+    const { searchParams } = new URL(req.url);
+    const jobId = searchParams.get('jobId');
+    if (!jobId) return NextResponse.json({ error: 'MISSING_JOB_ID' }, { status: 400 });
+
+    const job = await prisma.extractor_jobs.findUnique({ where: { id: jobId } });
+    if (!job) return NextResponse.json({ error: 'JOB_NOT_FOUND' }, { status: 404 });
+    if (job.user_id !== user.id) return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
+
+    // If job was already processing and deducted, refund token balance
+    if (job.status === 'processing' || job.status === 'pending_processing') {
+      await prisma.$transaction([
+        prisma.profiles.update({
+          where: { id: user.id },
+          data: { vcoin_balance: { increment: job.total_cost } }
+        }),
+        prisma.transactions.create({
+          data: {
+            user_id: user.id,
+            type: 'refund-extractor',
+            amount: job.total_cost,
+            status: 'completed',
+            meta_data: { job_id: jobId, reason: 'user_cancelled' }
+          }
+        }),
+        prisma.extractor_jobs.delete({ where: { id: jobId } })
+      ]);
+    } else {
+      await prisma.extractor_jobs.delete({ where: { id: jobId } });
+    }
+
+    return NextResponse.json({ success: true, message: 'Proses ekstraksi berhasil dibatalkan.' });
+  } catch (err: any) {
+    console.error('Extractor cancel error:', err);
+    return NextResponse.json({ error: 'CANCEL_ERROR', details: err.message }, { status: 500 });
   }
 }

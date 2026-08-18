@@ -15,14 +15,16 @@ export async function POST(req: NextRequest) {
     const job = await prisma.extractor_jobs.findUnique({ where: { id: jobId } });
     if (!job) return NextResponse.json({ error: 'JOB_NOT_FOUND' }, { status: 404 });
     if (job.user_id !== user.id) return NextResponse.json({ error: 'FORBIDDEN' }, { status: 403 });
-    if (job.status !== 'uploaded') return NextResponse.json({ error: 'INVALID_STATUS', message: 'Job belum siap dikonfirmasi.' }, { status: 400 });
+    if (job.status !== 'pending_confirmation' && job.status !== 'uploaded') {
+      return NextResponse.json({ error: 'INVALID_STATUS', message: 'Pekerjaan tidak dalam status menunggu konfirmasi.' }, { status: 400 });
+    }
 
     const profile = await prisma.profiles.findUnique({ where: { id: user.id } });
     if (!profile || profile.vcoin_balance < job.total_cost) {
       return NextResponse.json({ error: 'INSUFFICIENT_BALANCE', message: 'Saldo token tidak mencukupi.' }, { status: 402 });
     }
 
-    // Atomically deduct token & complete job
+    // Atomically deduct token & send job to Python offline worker engine
     await prisma.$transaction([
       prisma.profiles.update({
         where: { id: user.id },
@@ -35,22 +37,23 @@ export async function POST(req: NextRequest) {
           amount: -job.total_cost,
           status: 'completed',
           meta_data: { 
-            entries_count: job.total_extracted, 
-            cost_per_id: job.total_cost / Math.max(1, job.total_extracted),
+            conf_count: job.total_conf, 
+            cost: job.total_cost,
             job_id: jobId
           }
         }
       }),
       prisma.extractor_jobs.update({
         where: { id: jobId },
-        data: { status: 'completed' }
+        data: { status: 'pending_processing' }
       })
     ]);
 
     return NextResponse.json({
       success: true,
-      status: 'completed',
-      totalExtracted: job.total_extracted
+      status: 'processing',
+      jobId: job.id,
+      message: 'Pembayaran token berhasil. Engine offline sedang memproses parsing file.'
     });
   } catch (err: any) {
     console.error('Extractor confirm error:', err);

@@ -287,10 +287,10 @@ def db_claim_extractor_job():
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
                 UPDATE extractor_jobs
-                SET status = 'processing_analysis'
+                SET status = 'processing'
                 WHERE id = (
                     SELECT id FROM extractor_jobs
-                    WHERE status = 'pending_analysis'
+                    WHERE status = 'pending_processing'
                     ORDER BY created_at ASC
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
@@ -341,7 +341,7 @@ def extract_ids_from_content(content, min_len=6, max_len=9):
 
 def parse_config_file_improved(content):
     """
-    Parse konten config sesuai Mode 2 processor.py:
+    Parse konten config secara OFFLINE (Sesuai Mode 2 processor.py):
     - Ekstrak local_mac_addr (jika tidak ada MAC, TIDAK diskip, melainkan mac = 'NO_MAC')
     - Ekstrak semua hw_account_password_X
     - Ekstrak semua ID (hw_account_id_X atau angka 6-9 digit)
@@ -398,7 +398,7 @@ def parse_config_file_improved(content):
 
 def process_extractor_task(job_id, file_path):
     try:
-        print(f"[Extractor Engine] Streaming & Parsing Zip: {file_path}")
+        print(f"[Extractor Engine - OFFLINE] Memulai parsing local data: {file_path}")
         if not os.path.exists(file_path):
             db_update_extractor_failed(job_id, "File zip tidak ditemukan pada server storage.")
             return
@@ -435,7 +435,7 @@ def process_extractor_task(job_id, file_path):
                                         break
 
                         if not file_has_lines:
-                            # Parse config format
+                            # Parse config format secara OFFLINE
                             extracted = parse_config_file_improved(content)
                             raw_entries.extend(extracted)
 
@@ -457,66 +457,39 @@ def process_extractor_task(job_id, file_path):
             else:
                 dup_removed += 1
 
-        # Anti-Ban Round-Robin Shuffling by MAC
-        mac_groups = {}
-        for acc in unique_entries:
-            m = acc.get("mac", "") or "default_mac"
-            mac_groups.setdefault(m, []).append(acc)
+        # Format output string: ID: {id} PW: {pw} MAC: {mac}
+        txt_lines = []
+        for e in unique_entries:
+            mac_str = f" MAC: {e['mac']}" if e.get('mac') and e.get('mac') != 'NO_MAC' else ""
+            txt_lines.append(f"ID: {e['id']} PW: {e.get('pw', '')}{mac_str}".strip())
+        txt_output = "\n".join(txt_lines)
 
-        for group in mac_groups.values():
-            random.shuffle(group)
-
-        shuffled_accounts = []
-        max_group_len = max([len(g) for g in mac_groups.values()]) if mac_groups else 0
-        for i in range(max_group_len):
-            for group in mac_groups.values():
-                if i < len(group):
-                    shuffled_accounts.append(group[i])
-
-        random.shuffle(shuffled_accounts)
-
-        # Get service cost config
-        cost_per_id = 5
-        conn = get_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT cost_per_id FROM service_configs WHERE service_type = 'data-extractor'")
-                row = cur.fetchone()
-                if row and row[0]:
-                    cost_per_id = row[0]
-        except Exception:
-            pass
-        finally:
-            put_conn(conn)
-
-        total_cost = len(shuffled_accounts) * cost_per_id
-
-        # Update extractor job to ready (status: 'uploaded')
+        # Update extractor job to completed
         conn = get_conn()
         try:
             with conn.cursor() as cur:
                 cur.execute("""
                     UPDATE extractor_jobs
-                    SET total_conf = %s,
-                        total_extracted = %s,
+                    SET total_extracted = %s,
                         dup_removed = %s,
-                        total_cost = %s,
-                        status = 'uploaded',
+                        status = 'completed',
                         result_data = %s
                     WHERE id = %s
                 """, (
-                    total_conf,
-                    len(shuffled_accounts),
+                    len(unique_entries),
                     dup_removed,
-                    total_cost,
-                    psycopg2.extras.Json(shuffled_accounts),
+                    psycopg2.extras.Json({
+                        'entries': unique_entries,
+                        'txt_output': txt_output
+                    }),
                     job_id
                 ))
             conn.commit()
-            print(f"[Extractor Engine] Job {job_id} Analysis Complete! Conf: {total_conf}, Extracted: {len(shuffled_accounts)}, Dup Removed: {dup_removed}, Cost: {total_cost}")
+            print(f"[Extractor Engine - OFFLINE] Job {job_id} Parsing Selesai! Total Akun: {len(unique_entries)}, Duplikat Dihapus: {dup_removed}")
         except Exception as e:
             conn.rollback()
             print(f"[Extractor Engine] Database update error: {e}")
+            db_update_extractor_failed(job_id, str(e))
         finally:
             put_conn(conn)
 
@@ -525,7 +498,7 @@ def process_extractor_task(job_id, file_path):
         db_update_extractor_failed(job_id, str(e))
 
 def extractor_engine_loop():
-    print("[Extractor Engine] Loop started (Disk Streaming & Anti-Ban Shuffler Active)")
+    print("[Extractor Engine] Loop started (100% Offline Disk Streaming & Parsing Active)")
     with ThreadPoolExecutor(max_workers=5) as ext_pool:
         while True:
             try:
