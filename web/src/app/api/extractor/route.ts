@@ -4,6 +4,7 @@ import { createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import { Readable } from 'stream';
 import path from 'path';
+import crypto from 'crypto';
 import AdmZip from 'adm-zip';
 import { getUser } from '@/utils/auth';
 import { prisma } from '@/utils/prisma';
@@ -73,22 +74,35 @@ export async function POST(req: NextRequest) {
       await writeFile(savePath, buffer);
     }
 
-    // Step 2 Server Precheck: Scan valid .conf files & deduplicate identical filenames in ZIP
+    // LAPISAN 1: Wajib ekstensi .conf & Deduplikasi File (Content MD5 & Basename)
     let totalConf = 0;
+    let dupConfCount = 0;
     try {
       const zip = new AdmZip(savePath);
       const entries = zip.getEntries();
-      const confNames = new Set<string>();
+      const seenHashes = new Set<string>();
+      const seenBasenames = new Set<string>();
 
       for (const entry of entries) {
         if (!entry.isDirectory && !entry.entryName.startsWith('__MACOSX') && !entry.entryName.endsWith('.DS_Store')) {
           const lower = entry.entryName.toLowerCase();
-          if (lower.endsWith('.conf') || lower.endsWith('.txt') || lower.endsWith('.dat')) {
-            confNames.add(path.basename(entry.entryName));
+          // Lapisan 1: WAJIB ekstensi .conf
+          if (lower.endsWith('.conf')) {
+            const rawData = entry.getData();
+            const contentHash = crypto.createHash('md5').update(rawData).digest('hex');
+            const baseName = path.basename(entry.entryName).toLowerCase();
+
+            // Cek duplikasi berdasarkan content hash atau nama file identik
+            if (seenHashes.has(contentHash) || seenBasenames.has(baseName)) {
+              dupConfCount++;
+            } else {
+              seenHashes.add(contentHash);
+              seenBasenames.add(baseName);
+            }
           }
         }
       }
-      totalConf = confNames.size;
+      totalConf = seenHashes.size;
     } catch (zipErr: any) {
       console.error('ZIP read error:', zipErr);
       return NextResponse.json({
@@ -100,7 +114,7 @@ export async function POST(req: NextRequest) {
     if (totalConf === 0) {
       return NextResponse.json({
         error: 'NO_CONF_FILES',
-        message: 'Tidak ditemukan file konfigurasi (.conf) yang valid dalam arsip .zip ini.'
+        message: 'Tidak ditemukan file berekstensi .conf yang valid dalam arsip .zip ini.'
       }, { status: 400 });
     }
 
@@ -124,7 +138,7 @@ export async function POST(req: NextRequest) {
         original_name: filename,
         total_conf: totalConf,
         total_extracted: 0,
-        dup_removed: 0,
+        dup_removed: dupConfCount,
         total_cost: totalCost,
         status: 'pending_confirmation',
         result_data: { file_path: savePath, total_conf: totalConf }
@@ -136,6 +150,7 @@ export async function POST(req: NextRequest) {
       jobId: job.id,
       fileName: filename,
       totalConf,
+      dupRemoved: dupConfCount,
       totalCost,
       costPerConf,
       status: 'pending_confirmation',

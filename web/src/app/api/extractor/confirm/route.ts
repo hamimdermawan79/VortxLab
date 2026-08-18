@@ -57,6 +57,12 @@ function extractValidPasswords(content: string): string[] {
 }
 
 function parseConfigFileOffline(content: string): Array<{ id: string; pw: string; mac: string }> {
+  // LAPISAN 2: Wajib memiliki hw_account_password berawalan AF1. Jika tidak ada, SKIP FILE!
+  const passwords = extractValidPasswords(content);
+  if (passwords.length === 0) {
+    return []; // Skip file jika tidak ada password AF1 valid
+  }
+
   let mac = '';
   const macMatch = content.match(/local_mac_addr\s*=\s*([A-Fa-f0-9:]+)/i) ||
                    content.match(/local_mac_addr(?:["']?\s*>\s*|\s*=\s*|\s*:\s*)([^\s<"']+)/i) ||
@@ -64,8 +70,6 @@ function parseConfigFileOffline(content: string): Array<{ id: string; pw: string
   if (macMatch) {
     mac = (macMatch[1] || macMatch[0]).trim();
   }
-
-  const passwords = extractValidPasswords(content);
 
   const explicitIds: string[] = [];
   const idRegex = /hw_account_id_\d*(?:["']?\s*>\s*|\s*=\s*|\s*:\s*)(\d+)/gi;
@@ -84,8 +88,9 @@ function parseConfigFileOffline(content: string): Array<{ id: string; pw: string
     accountIds = extractIdsFromContent(content, 6, 9);
   }
 
-  if (accountIds.length > 0 && passwords.length === 0) {
-    passwords.push('');
+  // Jika tidak ada ID 6-9 digit valid, skip
+  if (accountIds.length === 0) {
+    return [];
   }
 
   const entries: Array<{ id: string; pw: string; mac: string }> = [];
@@ -165,34 +170,13 @@ export async function POST(req: NextRequest) {
       }
 
       const lower = entry.entryName.toLowerCase();
-      if (lower.endsWith('.conf') || lower.endsWith('.txt') || lower.endsWith('.dat') || lower.endsWith('.csv')) {
+      // Lapisan 1: Hanya file .conf
+      if (lower.endsWith('.conf')) {
         try {
           const content = entry.getData().toString('utf8');
-
-          // Check line by line for structured format
-          const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-          let fileHasLines = false;
-
-          for (const line of lines) {
-            const delims = [',', ':', '----', '|', '\t'];
-            for (const d of delims) {
-              if (line.includes(d)) {
-                const parts = line.split(d).map(p => p.trim());
-                if (parts.length >= 2 && /^\d{6,9}$/.test(parts[0])) {
-                  rawEntries.push({
-                    id: parts[0],
-                    pw: parts[1] || '',
-                    mac: parts[2] || 'NO_MAC'
-                  });
-                  fileHasLines = true;
-                  break;
-                }
-              }
-            }
-          }
-
-          if (!fileHasLines) {
-            const extracted = parseConfigFileOffline(content);
+          // Lapisan 2: Hanya ambil jika ada password AF1
+          const extracted = parseConfigFileOffline(content);
+          if (extracted.length > 0) {
             rawEntries.push(...extracted);
           }
         } catch (readErr) {

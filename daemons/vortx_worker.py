@@ -387,6 +387,9 @@ def parse_config_file_improved(content):
 
     # 2. Cari semua password valid (hanya yang berawalan AF1)
     passwords = extract_valid_passwords_py(content)
+    # LAPISAN 2: Jika tidak ada password AF1, SKIP FILE!
+    if not passwords:
+        return []
 
     # 3. Cari account ID eksplisit
     explicit_ids = re.findall(r"hw_account_id_\d*\s*=\s*(\d+)", content, re.IGNORECASE)
@@ -400,9 +403,9 @@ def parse_config_file_improved(content):
     else:
         account_ids = extract_ids_from_content(content, min_len=6, max_len=9)
 
-    # Jika ada ID namun tidak ada field password valid, isi string kosong agar ID tetap diproses
-    if account_ids and not passwords:
-        passwords = [""]
+    # Jika tidak ada ID 6-9 digit valid, skip
+    if not account_ids:
+        return []
 
     # 4. Kombinasi ID x Password
     entries = []
@@ -431,34 +434,18 @@ def process_extractor_task(job_id, file_path):
                 if filename.endswith('/') or filename.startswith('__MACOSX') or filename.endswith('.DS_Store'):
                     continue
 
+                # Lapisan 1: Hanya file .conf
+                if not filename.lower().endswith('.conf'):
+                    continue
+
                 total_conf += 1
                 try:
                     with z.open(filename) as f:
                         content = f.read().decode('utf-8', errors='ignore')
-
-                        # Check line by line for structured txt/csv/delimited entries
-                        lines = [l.strip() for l in content.splitlines() if l.strip()]
-                        file_has_lines = False
-
-                        for line in lines:
-                            # Match format: ID,PASSWORD,MAC or ID:PASSWORD:MAC or ID----PASSWORD----MAC
-                            delims = [',', ':', '----', '|', '\t']
-                            for d in delims:
-                                if d in line:
-                                    parts = [p.strip() for p in line.split(d)]
-                                    if len(parts) >= 2 and re.match(r'^\d{6,9}$', parts[0]):
-                                        final_id = parts[0]
-                                        final_pw = parts[1] if len(parts) > 1 else ""
-                                        final_mac = parts[2] if len(parts) > 2 else "NO_MAC"
-                                        raw_entries.append({"id": final_id, "pw": final_pw, "mac": final_mac})
-                                        file_has_lines = True
-                                        break
-
-                        if not file_has_lines:
-                            # Parse config format secara OFFLINE
-                            extracted = parse_config_file_improved(content)
+                        # Lapisan 2: Hanya ambil jika ada password AF1 valid
+                        extracted = parse_config_file_improved(content)
+                        if extracted:
                             raw_entries.extend(extracted)
-
                 except Exception as parse_err:
                     print(f"[Extractor Engine] Error parsing {filename}: {parse_err}")
 
