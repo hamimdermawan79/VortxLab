@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { uid, password } = body;
+    const { uid, password, mac } = body;
 
     if (!uid || !password) {
       return NextResponse.json(
@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
 
     const cleanUid = String(uid).trim();
     const cleanPassword = String(password).trim();
+    const cleanMac = mac ? String(mac).trim() : "";
 
     if (!cleanUid || !cleanPassword) {
       return NextResponse.json(
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest) {
             status: "completed",
             meta_data: {
               target_uid: cleanUid,
+              target_mac: cleanMac || null,
               cost: cost,
             },
           },
@@ -130,13 +132,13 @@ export async function POST(req: NextRequest) {
     }
 
     try {
+      const accountObj: Record<string, any> = { uid: cleanUid, password: cleanPassword };
+      if (cleanMac) accountObj.mac = cleanMac;
+
       const formData = new URLSearchParams();
       formData.append("action", "api_login_higgs");
       formData.append("api_key", botkitaApiKey);
-      formData.append(
-        "accounts",
-        JSON.stringify([{ uid: cleanUid, password: cleanPassword }])
-      );
+      formData.append("accounts", JSON.stringify([accountObj]));
 
       const botkitaRes = await fetch(botkitaUrl, {
         method: "POST",

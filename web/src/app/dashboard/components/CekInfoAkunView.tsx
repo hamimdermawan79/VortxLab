@@ -63,6 +63,7 @@ export default function CekInfoAkunView({
 }: CekInfoAkunViewProps) {
   const [uid, setUid] = useState("");
   const [password, setPassword] = useState("");
+  const [mac, setMac] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -75,7 +76,7 @@ export default function CekInfoAkunView({
     if (!result) return;
     const summary = `--- INFORMASI AKUN HIGGS ---
 UID: ${result.uid}
-Nickname: ${result.nick || "-"}
+${mac ? `MAC: ${mac}\n` : ""}Nickname: ${result.nick || "-"}
 VIP Level: VIP ${result.vip_level ?? 0}
 Chip: ${(result.chip ?? 0).toLocaleString("id-ID")} (${formatChip(result.chip)})
 Brankas: ${(result.brankas ?? 0).toLocaleString("id-ID")} (${formatChip(result.brankas)})
@@ -100,6 +101,7 @@ Status: ${result.status}`;
 
     const cleanUid = uid.trim();
     const cleanPassword = password.trim();
+    const cleanMac = mac.trim();
 
     if (!cleanUid || !cleanPassword) {
       setError("UID dan Password akun wajib diisi.");
@@ -117,7 +119,11 @@ Status: ${result.status}`;
       const res = await fetch("/api/cek-info-akun", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: cleanUid, password: cleanPassword }),
+        body: JSON.stringify({
+          uid: cleanUid,
+          password: cleanPassword,
+          ...(cleanMac ? { mac: cleanMac } : {}),
+        }),
       });
 
       let data: any = {};
@@ -166,7 +172,7 @@ Status: ${result.status}`;
             {/* UID Input */}
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold text-[#18181b]">
-                UID / Game ID
+                UID / Game ID <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
@@ -181,7 +187,7 @@ Status: ${result.status}`;
             {/* Password Input */}
             <div className="space-y-1.5">
               <label className="block text-xs font-semibold text-[#18181b]">
-                Password Akun
+                Password Akun <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <input
@@ -200,6 +206,23 @@ Status: ${result.status}`;
                   {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
               </div>
+            </div>
+
+            {/* MAC Address Input (Optional) */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-[#18181b]">
+                  MAC Address
+                </label>
+                <span className="text-[10px] text-[#71717a] font-normal">Opsional</span>
+              </div>
+              <input
+                type="text"
+                value={mac}
+                onChange={(e) => setMac(e.target.value)}
+                placeholder="Contoh: 00:1A:2B:3C:4D:5E"
+                className="w-full bg-[#fafafa] border border-[#e4e4e7] rounded-xs px-3.5 py-2.5 text-xs text-[#18181b] font-mono outline-none focus:border-black focus:bg-white transition-all placeholder:text-[#a1a1aa]"
+              />
             </div>
 
             {/* Price Info Box */}
@@ -267,8 +290,14 @@ Status: ${result.status}`;
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-[#71717a]">
-                        UID: <strong className="text-[#18181b]">{result.uid}</strong>
+                      <p className="text-[11px] text-[#71717a] flex items-center gap-2">
+                        <span>UID: <strong className="text-[#18181b]">{result.uid}</strong></span>
+                        {mac && (
+                          <>
+                            <span>•</span>
+                            <span>MAC: <strong className="text-[#18181b] font-mono">{mac}</strong></span>
+                          </>
+                        )}
                       </p>
                     </div>
                   </div>
