@@ -505,13 +505,43 @@ def extractor_engine_loop():
                 job = db_claim_extractor_job()
                 if job:
                     job_id = job["id"]
-                    file_path = job.get("result_data", {}).get("file_path", "")
-                    if file_path:
+                    raw_res = job.get("result_data")
+                    if isinstance(raw_res, str):
+                        try:
+                            raw_res = json.loads(raw_res)
+                        except Exception:
+                            raw_res = {}
+                    elif not isinstance(raw_res, dict):
+                        raw_res = {}
+
+                    file_path = raw_res.get("file_path", "")
+                    if not file_path or not os.path.exists(file_path):
+                        # Coba cari di path fallback uploads/data
+                        possible_dirs = [
+                            os.path.join(os.getcwd(), "web", "public", "uploads", "data"),
+                            os.path.join(os.getcwd(), "public", "uploads", "data"),
+                            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "public", "uploads", "data")
+                        ]
+                        for pdir in possible_dirs:
+                            if os.path.exists(pdir):
+                                for root, _, files in os.walk(pdir):
+                                    if job.get("original_name") and job["original_name"] in files:
+                                        file_path = os.path.join(root, job["original_name"])
+                                        break
+                            if file_path and os.path.exists(file_path):
+                                break
+
+                    if file_path and os.path.exists(file_path):
                         ext_pool.submit(process_extractor_task, job_id, file_path)
+                    else:
+                        print(f"[Extractor Engine] File path not found for job {job_id}: {file_path}")
+                        db_update_extractor_failed(job_id, "File arsip .zip tidak ditemukan pada storage server.")
+
                 time.sleep(1)
             except Exception as e:
                 print(f"[Extractor Engine] Loop Error: {e}")
-                time.sleep(5)
+                traceback.print_exc()
+                time.sleep(3)
 
 
 # =================== 3. TELEGRAM REPORTER DAEMON ===================

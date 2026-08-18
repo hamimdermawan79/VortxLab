@@ -1027,8 +1027,17 @@ function DataExtractorView({
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || data.error || "Gagal memproses konfirmasi.");
 
-      // Mulai polling hasil parsing offline worker
-      pollParsingProgress(jobId);
+      if (data.status === "completed" && data.results) {
+        setStatus("completed");
+        setCurrentStep(4);
+        setResults(data.results);
+        setTxtOutput(data.txtOutput || "");
+        setDupRemoved(data.dupRemoved || 0);
+        onSuccess(true);
+      } else {
+        // Fallback polling jika diproses background worker
+        pollParsingProgress(jobId);
+      }
     } catch (err: any) {
       setError(err.message);
       setStatus("idle");
@@ -1335,18 +1344,15 @@ function DataExtractorView({
 
       {/* STEP 3: MELAKUKAN PROSES PARSING PADA LOCAL DATA ANDA */}
       {currentStep === 3 && (
-        <div className="bg-white border border-[#e4e4e7] rounded-xs p-8 text-center space-y-4 shadow-xs">
+        <div className="bg-white border border-[#e4e4e7] rounded-xs p-8 text-center space-y-3 shadow-xs">
           <Loader2 className="animate-spin text-black mx-auto" size={28} />
           <div className="space-y-1">
             <h4 className="text-xs font-semibold text-[#18181b] uppercase tracking-wider">
               3. Melakukan Proses Parsing Pada local_data Anda...
             </h4>
             <p className="text-[11px] text-[#71717a]">
-              Engine offline sedang mengekstrak ID akun (6-9 digit), multi-password, dan informasi MAC secara lokal di storage VPS.
+              Engine sedang mengekstrak ID akun (6-9 digit), multi-password, dan informasi MAC dari file .conf Anda.
             </p>
-          </div>
-          <div className="text-[10px] font-mono text-[#a1a1aa] bg-[#fafafa] p-2 rounded-xs border border-[#e4e4e7] max-w-xs mx-auto">
-            Mode: 100% Offline Processing
           </div>
         </div>
       )}
