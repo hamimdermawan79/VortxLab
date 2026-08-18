@@ -2016,7 +2016,7 @@ export default function DashboardPage() {
                       </div>
                       <p className="text-xs text-[#71717a] font-mono font-semibold pt-0.5">
                         {activeHiggsTool.sku === "data-extractor"
-                          ? `${toolCost} token / ekstraksi`
+                          ? `${toolCost} token / file`
                           : activeHiggsTool.sku === "cek-info-akun"
                           ? `${toolCost} token / akun`
                           : `${toolCost} token / ID`}
