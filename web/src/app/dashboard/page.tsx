@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Sparkles,
   ChevronDown,
+  ChevronUp,
   User,
   Activity,
   Menu,
@@ -72,6 +73,231 @@ const HIGGS_PRODUCTS = [
 
 type Status = "idle" | "deducting" | "processing" | "completed" | "failed" | "uploading";
 
+// =================== Sortir Result Group Component ===================
+function SortirResultGroup({
+  amanIds = [],
+  bannedIds = [],
+  totalIds,
+  onDownloadCsv,
+  title = "Hasil Pemrosesan Sortir",
+}: {
+  amanIds?: string[];
+  bannedIds?: string[];
+  totalIds?: number;
+  onDownloadCsv?: () => void;
+  title?: string;
+}) {
+  const safeAman = Array.isArray(amanIds) ? amanIds : [];
+  const safeBanned = Array.isArray(bannedIds) ? bannedIds : [];
+  const total = totalIds || (safeAman.length + safeBanned.length);
+
+  const [copiedAman, setCopiedAman] = useState(false);
+  const [copiedBanned, setCopiedBanned] = useState(false);
+  const [showAllAman, setShowAllAman] = useState(false);
+  const [showAllBanned, setShowAllBanned] = useState(false);
+
+  const MAX_SHOW = 15;
+
+  const handleCopyAman = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (safeAman.length === 0) return;
+    navigator.clipboard.writeText(safeAman.join("\n"));
+    setCopiedAman(true);
+    setTimeout(() => setCopiedAman(false), 2000);
+  };
+
+  const handleCopyBanned = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (safeBanned.length === 0) return;
+    navigator.clipboard.writeText(safeBanned.join("\n"));
+    setCopiedBanned(true);
+    setTimeout(() => setCopiedBanned(false), 2000);
+  };
+
+  const visibleAman = showAllAman ? safeAman : safeAman.slice(0, MAX_SHOW);
+  const visibleBanned = showAllBanned ? safeBanned : safeBanned.slice(0, MAX_SHOW);
+
+  return (
+    <div className="space-y-3">
+      {title && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-[#e4e4e7]">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <h4 className="text-xs font-semibold text-[#18181b] uppercase tracking-wider">
+              {title}
+            </h4>
+            <span className="text-[11px] font-mono text-[#71717a]">
+              ({total.toLocaleString()} Total ID)
+            </span>
+          </div>
+          {onDownloadCsv && (
+            <button
+              onClick={onDownloadCsv}
+              className="self-start sm:self-auto text-[11px] flex items-center gap-1.5 px-3 py-1 bg-white border border-[#e4e4e7] rounded-xs text-black hover:bg-[#f4f4f5] transition-all font-medium shadow-2xs cursor-pointer"
+            >
+              <Download size={12} /> Unduh CSV
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        {/* CARD 1: AKUN AMAN (HIJAU OPACITY RENDAH) */}
+        <div className="bg-emerald-500/[0.06] border border-emerald-500/25 hover:border-emerald-500/40 transition-all rounded-xs p-3.5 flex flex-col justify-between space-y-3 shadow-xs">
+          <div>
+            <div className="flex items-center justify-between pb-2.5 border-b border-emerald-500/20">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-950">
+                  Akun Aman
+                </span>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800 border border-emerald-500/30">
+                  {safeAman.length.toLocaleString()} ID
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyAman}
+                disabled={safeAman.length === 0}
+                className="text-[11px] flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-500/30 rounded-xs shadow-2xs font-medium cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {copiedAman ? (
+                  <>
+                    <Check size={12} className="text-emerald-600" /> Tersalin!
+                  </>
+                ) : (
+                  <>
+                    <Copy size={12} /> Salin ({safeAman.length})
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="mt-2.5">
+              {safeAman.length === 0 ? (
+                <div className="py-5 text-center text-xs text-emerald-800/60 font-mono italic bg-white/40 rounded-xs border border-emerald-500/10">
+                  Tidak ada akun dalam status Aman
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="bg-white/80 border border-emerald-500/20 rounded-xs p-2 max-h-48 overflow-y-auto font-mono text-[11px] text-emerald-950 divide-y divide-emerald-500/10 select-all">
+                    {visibleAman.map((id, idx) => (
+                      <div
+                        key={idx}
+                        className="py-1 px-1.5 flex items-center justify-between hover:bg-emerald-500/10 rounded-xs"
+                      >
+                        <span className="font-semibold">{id}</span>
+                        <span className="text-[9px] text-emerald-700/60 font-sans font-normal">
+                          #{idx + 1}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {safeAman.length > MAX_SHOW && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllAman(!showAllAman)}
+                      className="w-full text-center py-1 text-[11px] text-emerald-800 font-semibold hover:underline cursor-pointer"
+                    >
+                      {showAllAman
+                        ? "▲ Sembunyikan sebagian"
+                        : `▼ Tampilkan semua (${safeAman.length.toLocaleString()} ID)`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-emerald-500/15 flex items-center justify-between text-[10px] text-emerald-800 font-mono">
+            <span>Rasio Akun Aman:</span>
+            <span className="font-semibold text-emerald-950">
+              {total > 0 ? ((safeAman.length / total) * 100).toFixed(1) : 0}%
+            </span>
+          </div>
+        </div>
+
+        {/* CARD 2: AKUN BANNED (MERAH OPACITY RENDAH) */}
+        <div className="bg-red-500/[0.06] border border-red-500/25 hover:border-red-500/40 transition-all rounded-xs p-3.5 flex flex-col justify-between space-y-3 shadow-xs">
+          <div>
+            <div className="flex items-center justify-between pb-2.5 border-b border-red-500/20">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-red-500" />
+                <span className="text-xs font-bold uppercase tracking-wider text-red-950">
+                  Akun Banned
+                </span>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-red-500/15 text-red-800 border border-red-500/30">
+                  {safeBanned.length.toLocaleString()} ID
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyBanned}
+                disabled={safeBanned.length === 0}
+                className="text-[11px] flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-red-50 text-red-800 border border-red-500/30 rounded-xs shadow-2xs font-medium cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {copiedBanned ? (
+                  <>
+                    <Check size={12} className="text-red-600" /> Tersalin!
+                  </>
+                ) : (
+                  <>
+                    <Copy size={12} /> Salin ({safeBanned.length})
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="mt-2.5">
+              {safeBanned.length === 0 ? (
+                <div className="py-5 text-center text-xs text-red-800/60 font-mono italic bg-white/40 rounded-xs border border-red-500/10">
+                  Tidak ada akun dalam status Banned
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="bg-white/80 border border-red-500/20 rounded-xs p-2 max-h-48 overflow-y-auto font-mono text-[11px] text-red-950 divide-y divide-red-500/10 select-all">
+                    {visibleBanned.map((id, idx) => (
+                      <div
+                        key={idx}
+                        className="py-1 px-1.5 flex items-center justify-between hover:bg-red-500/10 rounded-xs"
+                      >
+                        <span className="font-semibold">{id}</span>
+                        <span className="text-[9px] text-red-700/60 font-sans font-normal">
+                          #{idx + 1}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {safeBanned.length > MAX_SHOW && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllBanned(!showAllBanned)}
+                      className="w-full text-center py-1 text-[11px] text-red-800 font-semibold hover:underline cursor-pointer"
+                    >
+                      {showAllBanned
+                        ? "▲ Sembunyikan sebagian"
+                        : `▼ Tampilkan semua (${safeBanned.length.toLocaleString()} ID)`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-red-500/15 flex items-center justify-between text-[10px] text-red-800 font-mono">
+            <span>Rasio Akun Banned:</span>
+            <span className="font-semibold text-red-950">
+              {total > 0 ? ((safeBanned.length / total) * 100).toFixed(1) : 0}%
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // =================== SortirBanned View ===================
 function SortirBannedView({
   userBalance,
@@ -89,6 +315,8 @@ function SortirBannedView({
 
   const [historyJobs, setHistoryJobs] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [latestFinishedResult, setLatestFinishedResult] = useState<any | null>(null);
   const pollingTimeouts = useRef<Record<string, any>>({});
 
   const idList = useMemo(
@@ -141,6 +369,7 @@ function SortirBannedView({
               status: data.status,
               current_index: data.current_index,
               total_ids: data.total_ids,
+              raw_results: data.raw_results,
             };
           }
           return job;
@@ -152,7 +381,18 @@ function SortirBannedView({
           5000
         );
       } else {
-        if (data.status === "completed") onSuccess();
+        if (data.status === "completed") {
+          onSuccess();
+          if (data.raw_results) {
+            setLatestFinishedResult({
+              id: activityId,
+              aman: data.raw_results.aman || [],
+              banned: data.raw_results.banned || [],
+              total_ids: data.total_ids,
+            });
+            setExpandedJobId(activityId);
+          }
+        }
       }
     } catch (e) {
       pollingTimeouts.current[activityId] = setTimeout(
@@ -245,6 +485,18 @@ function SortirBannedView({
 
   const activeJob = historyJobs.find((j) => j.status === "pending" || j.status === "processing");
   const pastJobs = historyJobs.filter((j) => j.status === "completed" || j.status === "failed");
+
+  // Determine top featured result (latest completed or from history)
+  const displayLatestResult =
+    latestFinishedResult ||
+    (pastJobs.length > 0 && pastJobs[0].status === "completed" && pastJobs[0].raw_results
+      ? {
+          id: pastJobs[0].id,
+          aman: (pastJobs[0].raw_results as any)?.aman || [],
+          banned: (pastJobs[0].raw_results as any)?.banned || [],
+          total_ids: pastJobs[0].total_ids,
+        }
+      : null);
 
   return (
     <div className="space-y-6">
@@ -430,6 +682,19 @@ function SortirBannedView({
         </div>
       )}
 
+      {/* RECENT BATCH RESULT SECTION (IF AVAILABLE) */}
+      {displayLatestResult && (
+        <div className="bg-white border border-[#e4e4e7] rounded-xs p-5 shadow-xs">
+          <SortirResultGroup
+            title="Hasil Pemrosesan Terakhir"
+            amanIds={displayLatestResult.aman}
+            bannedIds={displayLatestResult.banned}
+            totalIds={displayLatestResult.total_ids}
+            onDownloadCsv={() => downloadHistoryCSV(displayLatestResult.id)}
+          />
+        </div>
+      )}
+
       {/* History Section */}
       <div className="bg-white border border-[#e4e4e7] rounded-xs p-5 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#e4e4e7] pb-3">
@@ -437,7 +702,7 @@ function SortirBannedView({
             <h3 className="text-xs font-medium text-[#18181b] uppercase tracking-wider">
               Riwayat Pekerjaan
             </h3>
-            <p className="text-[11px] text-[#71717a]">Daftar file hasil sortir akun</p>
+            <p className="text-[11px] text-[#71717a]">Daftar file dan hasil sortir akun</p>
           </div>
           <button
             onClick={loadHistory}
@@ -458,55 +723,107 @@ function SortirBannedView({
             Belum ada riwayat pekerjaan yang selesai.
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {pastJobs.map((job) => {
               const isFailed = job.status === "failed";
+              const isExpanded = expandedJobId === job.id;
+              const resObj = (job.raw_results as any) || {};
+              const jobAman = Array.isArray(resObj.aman) ? resObj.aman : [];
+              const jobBanned = Array.isArray(resObj.banned) ? resObj.banned : [];
+
               return (
                 <div
                   key={job.id}
-                  className="bg-[#fafafa] border border-[#e4e4e7] hover:border-black transition-colors rounded-xs p-3.5 flex flex-col sm:flex-row gap-3 sm:items-center justify-between"
+                  className="bg-[#fafafa] border border-[#e4e4e7] hover:border-black/30 transition-all rounded-xs overflow-hidden shadow-2xs"
                 >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`p-2 rounded-xs ${
-                        isFailed ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-700"
-                      }`}
-                    >
-                      {isFailed ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-[#18181b]">
-                        {job.total_ids.toLocaleString()} ID Target
-                      </p>
-                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[#71717a]">
-                        <span
-                          className={
-                            isFailed ? "text-red-600 font-medium" : "text-emerald-700 font-medium"
-                          }
-                        >
-                          {isFailed ? "Gagal" : "Selesai"}
-                        </span>
-                        <span>•</span>
-                        <span>
-                          {new Date(job.created_at).toLocaleString("id-ID", {
-                            day: "numeric",
-                            month: "short",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                        <span>•</span>
-                        <span className="font-semibold text-black">{job.cost.toLocaleString()} token</span>
+                  <div className="p-3.5 flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`p-2 rounded-xs ${
+                          isFailed ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-700"
+                        }`}
+                      >
+                        {isFailed ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-xs font-semibold text-[#18181b]">
+                            {job.total_ids.toLocaleString()} ID Target
+                          </p>
+                          {!isFailed && (jobAman.length > 0 || jobBanned.length > 0) && (
+                            <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-800 font-semibold">
+                                {jobAman.length} Aman
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-800 font-semibold">
+                                {jobBanned.length} Banned
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[#71717a]">
+                          <span
+                            className={
+                              isFailed ? "text-red-600 font-medium" : "text-emerald-700 font-medium"
+                            }
+                          >
+                            {isFailed ? "Gagal" : "Selesai"}
+                          </span>
+                          <span>•</span>
+                          <span>
+                            {new Date(job.created_at).toLocaleString("id-ID", {
+                              day: "numeric",
+                              month: "short",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                          <span>•</span>
+                          <span className="font-semibold text-black">{job.cost.toLocaleString()} token</span>
+                        </div>
                       </div>
                     </div>
+
+                    {!isFailed && (
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedJobId(isExpanded ? null : job.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e4e4e7] shadow-2xs text-black hover:bg-[#f4f4f5] text-xs font-medium rounded-xs transition-all cursor-pointer"
+                        >
+                          {isExpanded ? (
+                            <>
+                              <ChevronUp size={13} /> Sembunyikan
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown size={13} /> Lihat Hasil
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => downloadHistoryCSV(job.id)}
+                          className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white border border-[#e4e4e7] shadow-2xs text-black hover:bg-[#f4f4f5] text-xs font-medium rounded-xs transition-all cursor-pointer"
+                        >
+                          <Download size={12} /> Unduh CSV
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {!isFailed && (
-                    <button
-                      onClick={() => downloadHistoryCSV(job.id)}
-                      className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white border border-[#e4e4e7] shadow-2xs text-black hover:bg-[#f4f4f5] text-xs font-medium rounded-xs transition-all cursor-pointer"
-                    >
-                      <Download size={12} /> Unduh CSV
-                    </button>
+
+                  {/* EXPANDED RESULT CARDS IN HISTORY */}
+                  {isExpanded && !isFailed && (
+                    <div className="p-4 border-t border-[#e4e4e7] bg-white animate-in fade-in">
+                      <SortirResultGroup
+                        amanIds={jobAman}
+                        bannedIds={jobBanned}
+                        totalIds={job.total_ids}
+                        title={`Rincian Hasil #${job.id.slice(0, 8)}`}
+                        onDownloadCsv={() => downloadHistoryCSV(job.id)}
+                      />
+                    </div>
                   )}
                 </div>
               );

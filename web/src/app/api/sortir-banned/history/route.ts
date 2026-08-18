@@ -19,7 +19,8 @@ export async function GET(req: NextRequest) {
         current_index: true,
         total_ids: true,
         created_at: true,
-        cost: true
+        cost: true,
+        raw_results: true,
       },
       take: 20 // limit to last 20 jobs
     });
