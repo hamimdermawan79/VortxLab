@@ -11,6 +11,8 @@ dist/
 # Uploads & Large Assets
 public/uploads/
 web/public/uploads/
+private/uploads/
+web/private/uploads/
 *.exe
 *.zip
 *.tar.gz

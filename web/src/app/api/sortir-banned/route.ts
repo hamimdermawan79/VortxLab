@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/utils/auth";
 import { prisma } from "@/utils/prisma";
 import { checkSortirRateLimit } from "@/utils/rateLimiter";
-import { safeErrorResponse } from "@/utils/security";
+import { safeErrorResponse, isAllowedWebhookUrl } from "@/utils/security";
 import { processSortirJobAsync } from "@/utils/sortirEngine";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +36,18 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const { ids, webhook_url } = body;
+
+    // Validasi webhook_url untuk mencegah SSRF (tolak private/loopback/metadata).
+    let safeWebhookUrl: string | null = null;
+    if (webhook_url) {
+      if (typeof webhook_url !== "string" || !isAllowedWebhookUrl(webhook_url)) {
+        return NextResponse.json(
+          { error: "INVALID_WEBHOOK_URL", message: "URL webhook harus https dan bukan host internal/private." },
+          { status: 400 }
+        );
+      }
+      safeWebhookUrl = webhook_url;
+    }
 
     if (!Array.isArray(ids) || ids.length === 0) {
       return NextResponse.json(
@@ -106,7 +118,7 @@ export async function POST(req: NextRequest) {
             ids_count: cleanIds.length,
             cost_per_id: costPerId,
             is_api: isApi,
-            webhook_url: webhook_url || null,
+            webhook_url: safeWebhookUrl || null,
           },
         },
       }),
@@ -118,7 +130,7 @@ export async function POST(req: NextRequest) {
           status: "pending",
           raw_results: {
             ids: cleanIds,
-            webhook_url: webhook_url || null,
+            webhook_url: safeWebhookUrl || null,
           },
           current_index: 0,
         },
@@ -128,7 +140,7 @@ export async function POST(req: NextRequest) {
     const createdJob = result[2];
 
     // 4. Trigger Async Engine in background (with Webhook dispatch support)
-    processSortirJobAsync(createdJob.id, cleanIds, webhook_url);
+    processSortirJobAsync(createdJob.id, cleanIds, safeWebhookUrl || undefined);
 
     const response = NextResponse.json({
       success: true,
@@ -137,7 +149,7 @@ export async function POST(req: NextRequest) {
       cost_per_id: costPerId,
       cost: totalCost,
       remaining_token: profile.vcoin_balance - totalCost,
-      webhook_registered: !!webhook_url,
+      webhook_registered: !!safeWebhookUrl,
       rate_limit: {
         remaining_ids_this_minute: rateCheck.remaining,
       },

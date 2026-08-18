@@ -55,7 +55,7 @@ export async function GET() {
     const user = await getUser();
     if (!user || user.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+    const uploadsDir = path.join(process.cwd(), 'private', 'uploads');
     const storageStats = getDirStats(uploadsDir);
 
     const now = new Date();

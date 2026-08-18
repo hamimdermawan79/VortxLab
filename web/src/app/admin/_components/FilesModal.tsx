@@ -275,7 +275,7 @@ export function FilesModal({ isOpen, onClose }: FilesModalProps) {
 
         {/* Footer */}
         <div className="flex items-center justify-between pt-2 border-t border-[#e4e4e7] text-[11px] text-[#71717a]">
-          <span>Path: <code className="text-black bg-[#fafafa] px-1 py-0.5 rounded-xs">/public/uploads/data/</code></span>
+          <span>Path: <code className="text-black bg-[#fafafa] px-1 py-0.5 rounded-xs">/private/uploads/data/</code></span>
           <button
             onClick={onClose}
             className="px-4 py-1.5 bg-black text-white text-xs rounded-xs hover:bg-[#27272a] transition-colors cursor-pointer"

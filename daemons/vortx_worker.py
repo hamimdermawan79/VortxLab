@@ -72,7 +72,7 @@ DB_CONFIG = parse_db_config()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-UPLOADS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "public", "uploads")
+UPLOADS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "private", "uploads")
 
 # Concurrency settings for Sortir Banned
 MASTER_WORKER_SLOTS = 10
@@ -525,9 +525,9 @@ def extractor_engine_loop():
                     if not file_path or not os.path.exists(file_path):
                         # Coba cari di path fallback uploads/data
                         possible_dirs = [
-                            os.path.join(os.getcwd(), "web", "public", "uploads", "data"),
-                            os.path.join(os.getcwd(), "public", "uploads", "data"),
-                            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "public", "uploads", "data")
+                            os.path.join(os.getcwd(), "web", "private", "uploads", "data"),
+                            os.path.join(os.getcwd(), "private", "uploads", "data"),
+                            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "private", "uploads", "data")
                         ]
                         for pdir in possible_dirs:
                             if os.path.exists(pdir):

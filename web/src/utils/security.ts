@@ -4,6 +4,47 @@
  */
 
 import { NextResponse } from "next/server";
+import { isIP } from "net";
+
+/**
+ * Validasi URL webhook user-supplied untuk mencegah SSRF.
+ * Hanya https, tolak private/loopback/link-local/metadata & hostname internal.
+ */
+export function isAllowedWebhookUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:") return false;
+    const h = u.hostname.toLowerCase();
+    if (h === "localhost" || h.endsWith(".local") || h.endsWith(".internal") || h.endsWith(".localhost")) {
+      return false;
+    }
+    const ipType = isIP(h);
+    if (ipType) {
+      // IPv4 private ranges + metadata endpoint
+      if (
+        h === "127.0.0.1" ||
+        h.startsWith("0.") ||
+        h.startsWith("10.") ||
+        h.startsWith("169.254.") || // link-local + cloud metadata (AWS/GCP/Azure)
+        h.startsWith("192.168.") ||
+        h === "::1" ||
+        h.startsWith("fc") || // IPv6 unique local
+        h.startsWith("fd") ||
+        h.startsWith("fe80") // IPv6 link-local
+      ) {
+        return false;
+      }
+      // 172.16.0.0/12
+      if (h.startsWith("172.")) {
+        const octet = parseInt(h.split(".")[1], 10);
+        if (octet >= 16 && octet <= 31) return false;
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Mask sensitive tokens or keys (e.g. sk-vrtx-1234567890 -> sk-vrtx-1234••••7890)

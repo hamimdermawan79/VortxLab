@@ -136,9 +136,9 @@ export async function POST(req: NextRequest) {
     if (!filePath || !fs.existsSync(filePath)) {
       // Fallback: check uploads/data directories
       const possibleDirs = [
-        path.join(process.cwd(), 'public', 'uploads', 'data'),
-        path.join(process.cwd(), 'web', 'public', 'uploads', 'data'),
-        path.join(process.cwd(), '..', 'web', 'public', 'uploads', 'data')
+        path.join(process.cwd(), 'private', 'uploads', 'data'),
+        path.join(process.cwd(), 'web', 'private', 'uploads', 'data'),
+        path.join(process.cwd(), '..', 'web', 'private', 'uploads', 'data')
       ];
       for (const d of possibleDirs) {
         if (fs.existsSync(d)) {

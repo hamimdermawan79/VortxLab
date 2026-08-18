@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from "@/utils/prisma";
+import { getUser } from "@/utils/auth";
 import { safeErrorResponse } from "@/utils/security";
 
 export async function GET(req: Request) {
   try {
+    const user = await getUser();
+    if (!user) return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
+
     const { searchParams } = new URL(req.url);
     const invoice_id = searchParams.get('invoice_id');
     if (!invoice_id) {
@@ -12,6 +16,7 @@ export async function GET(req: Request) {
 
     const tx = await prisma.transactions.findFirst({
       where: {
+        user_id: user.id,
         OR: [
           { meta_data: { path: ['cashi_order_id'], equals: invoice_id } },
           { meta_data: { path: ['bayargg_invoice_id'], equals: invoice_id } }
