@@ -933,8 +933,8 @@ function DataExtractorView({
       setError("Hanya file arsip .zip yang didukung.");
       return;
     }
-    if (f.size > 500 * 1024 * 1024) {
-      setError("Maksimal ukuran file adalah 500MB.");
+    if (f.size > 10 * 1024 * 1024) {
+      setError(`Ukuran file terlalu besar (${(f.size / (1024 * 1024)).toFixed(1)} MB). Batas maksimal upload adalah 10 MB per file .zip.`);
       return;
     }
 
@@ -962,7 +962,7 @@ function DataExtractorView({
       } catch {
         throw new Error(
           res.status === 413
-            ? "Ukuran file melebihi limit upload server/Cloudflare 100MB."
+            ? "Ukuran file melebihi batas upload 10MB."
             : `Gagal mengunggah file ke server (HTTP ${res.status}).`
         );
       }
@@ -1213,7 +1213,7 @@ function DataExtractorView({
                 Drag & Drop atau Pilih File .ZIP
               </span>
               <span className="text-[11px] text-[#71717a] block">
-                Maksimal 500MB • Mode Precheck Offline (Ekstraksi .conf, ID 6-9 digit & Multi-Password)
+                Maksimal 10MB • Mode Precheck Offline (Ekstraksi .conf, ID 6-9 digit & Multi-Password)
               </span>
             </div>
             <span className="mt-2 text-xs px-4 py-2 bg-black text-white rounded-xs font-medium uppercase tracking-wider hover:bg-[#27272a] shadow-2xs">

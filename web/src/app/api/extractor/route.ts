@@ -91,7 +91,10 @@ export async function POST(req: NextRequest) {
       totalConf = confNames.size;
     } catch (zipErr: any) {
       console.error('ZIP read error:', zipErr);
-      return NextResponse.json({ error: 'INVALID_ZIP', message: 'File .zip rusak atau tidak dapat dibaca.' }, { status: 400 });
+      return NextResponse.json({
+        error: 'INVALID_ZIP',
+        message: 'File .zip rusak atau melebihi batas 10MB sehingga terpotong saat diunggah. Pastikan ukuran file maksimal 10MB.'
+      }, { status: 400 });
     }
 
     if (totalConf === 0) {
