@@ -3,8 +3,7 @@ module.exports = {
     {
       name: "vortx-web",
       cwd: "./web",
-      script: "npm",
-      args: "start",
+      script: "server.js",
       env: {
         PORT: 3000,
         NODE_ENV: "production"
