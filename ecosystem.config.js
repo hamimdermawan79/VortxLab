@@ -14,6 +14,7 @@ module.exports = {
     },
     {
       name: "vortx-worker",
+      cwd: __dirname,
       script: "python3",
       args: "daemons/vortx_worker.py",
       autorestart: true,
