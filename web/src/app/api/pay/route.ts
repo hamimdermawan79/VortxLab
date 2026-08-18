@@ -17,10 +17,7 @@ export async function GET(req: Request) {
     const tx = await prisma.transactions.findFirst({
       where: {
         user_id: user.id,
-        OR: [
-          { meta_data: { path: ['cashi_order_id'], equals: invoice_id } },
-          { meta_data: { path: ['bayargg_invoice_id'], equals: invoice_id } }
-        ]
+        meta_data: { path: ['cashi_order_id'], equals: invoice_id }
       }
     });
 

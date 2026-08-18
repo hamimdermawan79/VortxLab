@@ -197,7 +197,7 @@ export default function TopupPage() {
     if (meta.qris_url) {
       setQrisUrl(meta.qris_url);
       setPaymentUrl(meta.payment_url || "");
-      setInvoiceId(meta.cashi_order_id || meta.bayargg_invoice_id || "");
+      setInvoiceId(meta.cashi_order_id || "");
     }
   };
 
