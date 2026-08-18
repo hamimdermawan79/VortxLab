@@ -105,9 +105,21 @@ export default function IntipNomorView({
         body: JSON.stringify({ ids: targetIds }),
       });
 
-      const data = await res.json();
+      let data: any = {};
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        data = await res.json().catch(() => ({}));
+      } else {
+        const text = await res.text().catch(() => "");
+        throw new Error(
+          text.includes("<!DOCTYPE") || text.includes("<html")
+            ? `Server Error (${res.status}): Terjadi kesalahan saat memproses API Intip Nomor.`
+            : text || `Server Error (${res.status})`
+        );
+      }
+
       if (!res.ok) {
-        throw new Error(data.message || data.error || "Gagal memproses request");
+        throw new Error(data.message || data.error || "Gagal memproses request.");
       }
 
       setResults(data.results || []);

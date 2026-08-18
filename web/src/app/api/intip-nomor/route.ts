@@ -168,12 +168,14 @@ export async function POST(req: NextRequest) {
           }
         });
 
-        const providerMsg =
-          botkitaData.message || botkitaData.error || "Gagal mendapatkan data dari provider upstream.";
+        let providerMsg = botkitaData.error || botkitaData.message || "Gagal mendapatkan data dari provider upstream.";
+        if (typeof providerMsg === "string" && (providerMsg.includes("<!DOCTYPE") || providerMsg.includes("<html"))) {
+          providerMsg = "Provider upstream sedang offline atau dalam pemeliharaan.";
+        }
         return NextResponse.json(
           {
             error: "UPSTREAM_PROVIDER_ERROR",
-            message: `Provider API Error: ${providerMsg}. Saldo token Anda telah dikembalikan otomatis.`,
+            message: `Provider API: ${providerMsg}. Saldo token Anda telah dikembalikan otomatis.`,
           },
           { status: 502 }
         );

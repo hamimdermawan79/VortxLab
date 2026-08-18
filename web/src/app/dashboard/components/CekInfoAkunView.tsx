@@ -120,7 +120,19 @@ Status: ${result.status}`;
         body: JSON.stringify({ uid: cleanUid, password: cleanPassword }),
       });
 
-      const data = await res.json();
+      let data: any = {};
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        data = await res.json().catch(() => ({}));
+      } else {
+        const text = await res.text().catch(() => "");
+        throw new Error(
+          text.includes("<!DOCTYPE") || text.includes("<html")
+            ? `Server Error (${res.status}): Terjadi kesalahan saat memproses API Cek Info Akun.`
+            : text || `Server Error (${res.status})`
+        );
+      }
+
       if (!res.ok) {
         throw new Error(data.message || data.error || "Gagal melakukan pengecekan akun.");
       }
