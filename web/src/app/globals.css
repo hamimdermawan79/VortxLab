@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-alt: #fff9f5;
+  --color-surface-soft: #fef4ed;
+  --color-border: #f7d8c4;
+  --color-border-orange: #f7d8c4;
+  --color-border-light: #fdeade;
+  --color-text: #2b1b17;
+  --color-text-muted: #7c6862;
+  --color-text-dim: #a69590;
+  --color-accent: #e26d40;
+  --color-accent-hover: #ce592c;
+  --color-accent-light: #fef4ed;
+  --color-orange-50: #fff9f5;
+  --color-orange-100: #fef4ed;
+  --color-orange-200: #fdeade;
+  --color-orange-300: #f7d8c4;
+  --color-orange-400: #f49a70;
+  --color-orange-500: #ea7a4e;
+  --color-orange-600: #e26d40;
+  --color-orange-700: #ce592c;
+  --color-orange-burnt: #e26d40;
+  --color-purple-badge: #e26d40;
+  --color-purple-light: #fef4ed;
+  --color-green: #10b981;
+  --color-green-light: #ecfdf5;
+  --color-red: #ef4444;
+  --color-red-light: #fef2f2;
+  --color-yellow: #d97706;
+  --color-yellow-light: #fffbeb;
+  --font-sans: var(--font-mono), "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-mono: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+
+  /* Razor-sharp rectangular corners (1px - 3px max) */
+  --radius-xs: 1px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 3px;
+  --radius-xl: 3px;
+  --radius-2xl: 3px;
+  --radius-3xl: 3px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #f7d8c4 transparent;
+}
+
+body {
+  background-color: #ffffff;
+  color: #2b1b17;
+  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: -0.01em;
+  font-weight: 400;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+input, textarea, select, button {
+  font-family: inherit;
+}

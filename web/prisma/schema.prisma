@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model profiles {
+  id             String         @id @default(uuid())
+  username       String         @unique
+  email          String?        @unique
+  google_id      String?        @unique
+  avatar_url     String?
+  password_hash  String?
+  phone          String?
+  role           String         @default("user")
+  vcoin_balance  Int            @default(0)
+  balance        Int            @default(0)
+  total_spent    Int            @default(0)
+  created_at     DateTime       @default(now())
+
+  transactions        transactions[]
+  sortir_banned_jobs  sortir_banned_jobs[]
+  extractor_jobs      extractor_jobs[]
+  licenses            licenses[]
+  app_licenses        app_licenses[]
+  api_keys            api_keys[]
+}
+
+model transactions {
+  id          String   @id @default(uuid())
+  user_id     String
+  type        String
+  amount      Int
+  status      String   @default("pending")
+  meta_data   Json?
+  created_at  DateTime @default(now())
+
+  profile     profiles @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model sortir_banned_jobs {
+  id             String    @id @default(uuid())
+  user_id        String?
+  total_ids      Int       @default(0)
+  cost           Int       @default(0)
+  current_index  Int       @default(0)
+  status         String    @default("pending")
+  raw_results    Json?
+  created_at     DateTime  @default(now())
+
+  profile        profiles? @relation(fields: [user_id], references: [id], onDelete: SetNull)
+}
+
+model extractor_jobs {
+  id              String    @id @default(uuid())
+  user_id         String?
+  original_name   String    @default("")
+  total_conf      Int       @default(0)
+  total_extracted Int       @default(0)
+  dup_removed     Int       @default(0)
+  total_cost      Int       @default(0)
+  status          String    @default("uploaded")  
+  result_data     Json?
+  created_at      DateTime  @default(now())
+  
+  profile         profiles? @relation(fields: [user_id], references: [id], onDelete: SetNull)
+}
+
+model products {
+  id            String   @id @default(uuid())
+  sku           String   @unique
+  name          String
+  display_name  String?
+  cost_per_day  Int      @default(100)
+  min_day_rent  Int      @default(1)
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+
+  licenses      licenses[]
+  app_licenses  app_licenses[]
+}
+
+model licenses {
+  id            String    @id @default(uuid())
+  user_id       String
+  product_sku   String
+  product_name  String?
+  expires_at    DateTime
+  created_at    DateTime  @default(now())
+
+  profile       profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  product       products  @relation(fields: [product_sku], references: [sku], onDelete: Cascade)
+}
+
+model login_attempts {
+  id            String   @id @default(uuid())
+  username      String
+  ip_address    String
+  user_agent    String   @default("")
+  failed_count  Int      @default(0)
+  locked_until  DateTime?
+  last_failed_at DateTime @default(now())
+  created_at    DateTime @default(now())
+
+  @@unique([username, ip_address, user_agent])
+  @@index([username])
+  @@index([ip_address])
+}
+
+model app_licenses {
+  id             String   @id @default(uuid())
+  app_id         String   @unique
+  user_id        String
+  product_sku    String
+  secret_hash    String
+  expires_at     DateTime
+  bound_hwid_hash String?
+  reset_events   Json?
+  download_url   String?
+  revoked_at     DateTime?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  profile        profiles @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  product        products @relation(fields: [product_sku], references: [sku], onDelete: Cascade)
+  sessions       app_license_sessions[]
+  reset_events_log app_license_reset_events[]
+
+  @@index([user_id])
+  @@index([expires_at])
+}
+
+model app_license_sessions {
+  id          String   @id @default(uuid())
+  license_id  String
+  token_hash  String   @unique
+  expires_at  DateTime
+  created_at  DateTime @default(now())
+
+  license     app_licenses @relation(fields: [license_id], references: [id], onDelete: Cascade)
+
+  @@index([license_id])
+  @@index([expires_at])
+}
+
+model app_license_reset_events {
+  id          String   @id @default(uuid())
+  license_id  String
+  old_hwid_hash String?
+  new_hwid_hash String
+  created_at  DateTime @default(now())
+
+  license     app_licenses @relation(fields: [license_id], references: [id], onDelete: Cascade)
+
+  @@index([license_id, created_at])
+}
+
+model service_configs {
+  id           String   @id @default(uuid())
+  service_type String   @unique
+  cost_per_id  Int      @default(20)
+  is_active    Boolean  @default(true)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+}
+
+model visitor_logs {
+  id         String   @id @default(uuid())
+  ip_hash    String
+  path       String   @default("/")
+  user_agent String?
+  created_at DateTime @default(now())
+
+  @@index([created_at])
+  @@index([path])
+}
+
+model api_keys {
+  id         String    @id @default(uuid())
+  user_id    String
+  name       String    @default("Default API Key")
+  key        String    @unique
+  is_active  Boolean   @default(true)
+  created_at DateTime  @default(now())
+  last_used  DateTime?
+
+  profile    profiles  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([key])
+  @@index([user_id])
+}
+
+
