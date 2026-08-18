@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     const timestamp = Date.now().toString();
     const saveDir = path.join(process.cwd(), 'public', 'uploads', 'data', timestamp);
     await mkdir(saveDir, { recursive: true });
-    const savePath = path.join(saveDir, file.name);
+    const savePath = path.resolve(saveDir, file.name);
     await writeFile(savePath, buffer);
 
     // Create job record for Python worker to process
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
 
   } catch (err: any) {
     console.error('Extractor upload error:', err);
-    return NextResponse.json({ error: 'Upload failed', details: err.message }, { status: 500 });
+    return NextResponse.json({ error: 'Upload failed', message: err.message || 'Gagal menyimpan file di server' }, { status: 500 });
   }
 }
 

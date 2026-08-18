@@ -274,10 +274,11 @@ def sortir_engine_loop():
 
 
 # =================== 2. DATA EXTRACTOR ENGINE ===================
-re_mac = re.compile(r'local_mac_addr(?:["\']?\s*>\s*|\s*=\s*)([^\s<"\']+)')
-re_pw = re.compile(r'hw_account_password_\d+(?:["\']?\s*>\s*|\s*=\s*)([^\s<"\']+)')
-re_id = re.compile(r'hw_account_id_\d+(?:["\']?\s*>\s*|\s*=\s*)([0-9]+)')
-re_digits = re.compile(r'\b\d{6,9}\b')
+re_mac = re.compile(r'local_mac_addr(?:["\']?\s*>\s*|\s*=\s*|\s*:\s*)([^\s<"\']+)', re.IGNORECASE)
+re_pw = re.compile(r'hw_account_password_\d*(?:["\']?\s*>\s*|\s*=\s*|\s*:\s*)([^\s<"\']+)', re.IGNORECASE)
+re_id = re.compile(r'hw_account_id_\d*(?:["\']?\s*>\s*|\s*=\s*|\s*:\s*)([0-9]+)', re.IGNORECASE)
+re_digits = re.compile(r'\b\d{6,10}\b')
+re_generic_mac = re.compile(r'([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})')
 
 def db_claim_extractor_job():
     conn = get_conn()
@@ -338,13 +339,37 @@ def process_extractor_task(job_id, file_path):
 
         with zipfile.ZipFile(file_path, 'r') as z:
             for filename in z.namelist():
-                if not filename.endswith('/') and filename.lower().endswith('.conf'):
-                    total_conf += 1
-                    try:
-                        with z.open(filename) as f:
-                            content = f.read().decode('utf-8', errors='ignore')
-                            mac_match = re_mac.search(content)
-                            mac_addr = mac_match.group(1) if mac_match else ""
+                if filename.endswith('/') or filename.startswith('__MACOSX') or filename.endswith('.DS_Store'):
+                    continue
+
+                total_conf += 1
+                try:
+                    with z.open(filename) as f:
+                        content = f.read().decode('utf-8', errors='ignore')
+
+                        # Check line by line for structured txt/csv/delimited entries
+                        lines = [l.strip() for l in content.splitlines() if l.strip()]
+                        file_has_lines = False
+
+                        for line in lines:
+                            # Match format: ID,PASSWORD,MAC or ID:PASSWORD:MAC or ID----PASSWORD----MAC
+                            delims = [',', ':', '----', '|', '\t']
+                            matched_delim = None
+                            for d in delims:
+                                if d in line:
+                                    parts = [p.strip() for p in line.split(d)]
+                                    if len(parts) >= 2 and re.match(r'^\d{6,10}$', parts[0]):
+                                        final_id = parts[0]
+                                        final_pw = parts[1] if len(parts) > 1 else ""
+                                        final_mac = parts[2] if len(parts) > 2 else ""
+                                        raw_entries.append({"id": final_id, "pw": final_pw, "mac": final_mac})
+                                        file_has_lines = True
+                                        break
+
+                        if not file_has_lines:
+                            # Fallback to XML/Conf regex extraction
+                            mac_match = re_mac.search(content) or re_generic_mac.search(content)
+                            mac_addr = mac_match.group(1) if (mac_match and hasattr(mac_match, 'group')) else (mac_match.group(0) if mac_match else "")
 
                             passwords = re_pw.findall(content)
                             account_ids = list(set(re_id.findall(content)))
@@ -356,14 +381,29 @@ def process_extractor_task(job_id, file_path):
                             final_pw = passwords[0] if passwords else ""
                             final_mac = mac_addr
 
-                            raw_entries.append({"id": final_id, "pw": final_pw, "mac": final_mac})
-                    except Exception:
-                        raw_entries.append({"id": "", "pw": "", "mac": ""})
+                            if final_id:
+                                raw_entries.append({"id": final_id, "pw": final_pw, "mac": final_mac})
+                except Exception as parse_err:
+                    print(f"[Extractor Engine] Error parsing {filename}: {parse_err}")
+
+        # Filter only entries with valid IDs
+        valid_entries = [e for e in raw_entries if e.get("id")]
+        
+        # Deduplicate entries based on ID
+        seen_ids = set()
+        unique_entries = []
+        dup_removed = 0
+        for entry in valid_entries:
+            if entry["id"] not in seen_ids:
+                seen_ids.add(entry["id"])
+                unique_entries.append(entry)
+            else:
+                dup_removed += 1
 
         # Anti-Ban Round-Robin Shuffling by MAC
         mac_groups = {}
-        for acc in raw_entries:
-            m = acc.get("mac", "")
+        for acc in unique_entries:
+            m = acc.get("mac", "") or "default_mac"
             mac_groups.setdefault(m, []).append(acc)
 
         for group in mac_groups.values():

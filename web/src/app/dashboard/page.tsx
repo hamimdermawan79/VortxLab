@@ -905,12 +905,21 @@ function DataExtractorView({
 
     try {
       const res = await fetch("/api/extractor", { method: "POST", body: formData });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || data.error || "Upload gagal");
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(
+          res.status === 413
+            ? "Ukuran file terlalu besar (melebihi limit upload server/Cloudflare 100MB)"
+            : `Gagal mengunggah file ke server (HTTP ${res.status})`
+        );
+      }
+      if (!res.ok) throw new Error(data.message || data.error || `Upload gagal (HTTP ${res.status})`);
       setJobId(data.jobId);
       pollAnalysis(data.jobId);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "Gagal memproses file upload.");
       setStatus("idle");
       setFile(null);
     }
