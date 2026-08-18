@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from "@/utils/prisma";
 import { getUser } from '@/utils/auth';
+import { safeErrorResponse } from '@/utils/security';
+
 export async function GET(req: Request) {
   try {
     const user = await getUser();
@@ -41,8 +43,11 @@ export async function GET(req: Request) {
     };
 
     return NextResponse.json({ transactions, summary });
-  } catch { return NextResponse.json({ error: 'Server error' }, { status: 500 }); }
+  } catch (err: any) { 
+    return safeErrorResponse(err, 'Gagal memuat data transaksi admin.'); 
+  }
 }
+
 export async function PATCH(req: Request) {
   try {
     const user = await getUser();
@@ -53,5 +58,7 @@ export async function PATCH(req: Request) {
       await prisma.profiles.update({ where: { id: tx.user_id }, data: { vcoin_balance: { increment: tx.amount } } });
     }
     return NextResponse.json({ success: true });
-  } catch { return NextResponse.json({ error: 'Server error' }, { status: 500 }); }
+  } catch (err: any) { 
+    return safeErrorResponse(err, 'Gagal memperbarui status transaksi.'); 
+  }
 }

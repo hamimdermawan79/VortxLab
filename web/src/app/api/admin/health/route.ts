@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getUser } from "@/utils/auth";
 import { prisma } from "@/utils/prisma";
+import { safeErrorResponse } from "@/utils/security";
 import os from "os";
 
 export const dynamic = "force-dynamic";
@@ -101,7 +102,6 @@ export async function GET() {
       },
     });
   } catch (err: any) {
-    console.error("Admin Health API Error:", err);
-    return NextResponse.json({ error: "INTERNAL_ERROR", message: err.message }, { status: 500 });
+    return safeErrorResponse(err, "Gagal memuat status kesehatan sistem.");
   }
 }

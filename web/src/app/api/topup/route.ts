@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from "@/utils/prisma";
 import { getUser } from '@/utils/auth';
+import { safeErrorResponse } from '@/utils/security';
 
 export async function POST(req: Request) {
   try {
@@ -88,7 +89,6 @@ export async function POST(req: Request) {
       qris_url: qrisUrl
     });
   } catch (err: any) {
-    console.error('[Topup API Error]:', err);
-    return NextResponse.json({ error: 'SERVER_CRASH', details: err.message }, { status: 500 });
+    return safeErrorResponse(err, "Gagal memproses transaksi top-up.");
   }
 }

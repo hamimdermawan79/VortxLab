@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { getUser } from '@/utils/auth';
+import { safeErrorResponse } from '@/utils/security';
 
 export async function GET() {
   try {
@@ -35,8 +36,7 @@ export async function GET() {
 
     return NextResponse.json(await prisma.service_configs.findMany({ orderBy: { service_type: 'asc' } }));
   } catch (error: any) {
-    console.error('Service configs GET error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return safeErrorResponse(error, 'Gagal memuat konfigurasi harga layanan.');
   }
 }
 
@@ -53,7 +53,6 @@ export async function PATCH(req: NextRequest) {
     });
     return NextResponse.json(updated);
   } catch (error: any) {
-    console.error('Service configs PATCH error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return safeErrorResponse(error, 'Gagal memperbarui harga layanan.');
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { getUser } from '@/utils/auth';
+import { safeErrorResponse } from '@/utils/security';
 import fs from 'fs';
 import path from 'path';
 
@@ -272,7 +273,6 @@ export async function GET() {
       featureTrend30d
     });
   } catch (error: any) {
-    console.error("Admin Stats API Error:", error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return safeErrorResponse(error, 'Gagal memuat statistik sistem.');
   }
 }

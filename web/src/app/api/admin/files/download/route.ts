@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/utils/auth";
+import { safeErrorResponse } from "@/utils/security";
 import fs from "fs";
 import path from "path";
 
@@ -42,7 +43,6 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (err: any) {
-    console.error("Admin File Download Error:", err);
-    return NextResponse.json({ error: "INTERNAL_ERROR", message: err.message }, { status: 500 });
+    return safeErrorResponse(err, "Gagal mengunduh file admin.");
   }
 }

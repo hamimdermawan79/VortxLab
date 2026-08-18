@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/utils/prisma";
 import { getUser } from "@/utils/auth";
+import { safeErrorResponse } from "@/utils/security";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -38,6 +39,6 @@ export async function GET() {
       role: profile.role,
     });
   } catch (err: any) {
-    return NextResponse.json({ error: "SERVER_ERROR", message: err.message }, { status: 500 });
+    return safeErrorResponse(err, "Gagal mengambil data saldo profil.");
   }
 }

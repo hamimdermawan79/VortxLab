@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from "@/utils/prisma";
+import { safeErrorResponse } from "@/utils/security";
 
 export async function GET(req: Request) {
   try {
@@ -33,7 +34,6 @@ export async function GET(req: Request) {
       created_at: tx.created_at,
     });
   } catch (err: any) {
-    console.error('[Pay API] error:', err);
-    return NextResponse.json({ error: 'SERVER_CRASH', details: err.message }, { status: 500 });
+    return safeErrorResponse(err, 'Gagal memuat status pembayaran invoice.');
   }
 }

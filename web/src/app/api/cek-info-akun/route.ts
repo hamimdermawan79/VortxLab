@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/utils/auth";
 import { prisma } from "@/utils/prisma";
 import { checkCekInfoAkunRateLimit } from "@/utils/rateLimiter";
+import { safeErrorResponse } from "@/utils/security";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -108,9 +109,25 @@ export async function POST(req: NextRequest) {
     }
 
     // Call BotKita API
-    const botkitaApiKey =
-      process.env.BOTKITA_API_KEY || "bk_d44c4bd2fa233b5c0b8ea76577f70924c7800d429a73ff93";
+    const botkitaApiKey = process.env.BOTKITA_API_KEY;
     const botkitaUrl = process.env.BOTKITA_BASE_URL || "https://botkita.online/handleMsg.do";
+
+    if (!botkitaApiKey) {
+      if (txRecord) {
+        await prisma.profiles.update({
+          where: { id: user.id },
+          data: { vcoin_balance: { increment: cost } },
+        });
+        await prisma.transactions.update({
+          where: { id: txRecord.id },
+          data: { status: "failed" },
+        });
+      }
+      return NextResponse.json(
+        { error: "SERVICE_UNAVAILABLE", message: "Layanan provider sedang dalam pemeliharaan sistem." },
+        { status: 503 }
+      );
+    }
 
     try {
       const formData = new URLSearchParams();
@@ -192,7 +209,7 @@ export async function POST(req: NextRequest) {
         remaining_balance: updatedProfile?.vcoin_balance ?? 0,
       });
     } catch (fetchErr: any) {
-      console.error("[BotKita Login Higgs Fetch Error]:", fetchErr);
+      console.error("[BotKita Login Higgs Fetch Error]:", fetchErr?.message || "Connection failed");
       // Auto-refund on connection network crash
       await prisma.profiles.update({
         where: { id: user.id },
@@ -214,10 +231,6 @@ export async function POST(req: NextRequest) {
       );
     }
   } catch (err: any) {
-    console.error("[Cek Info Akun API Crash]:", err);
-    return NextResponse.json(
-      { error: "SERVER_ERROR", message: err.message || "Terjadi kesalahan internal server." },
-      { status: 500 }
-    );
+    return safeErrorResponse(err, "Terjadi kesalahan internal server saat memproses cek info akun.");
   }
 }

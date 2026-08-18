@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import AdmZip from 'adm-zip';
 import { getUser } from '@/utils/auth';
 import { prisma } from '@/utils/prisma';
+import { safeErrorResponse } from '@/utils/security';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -158,8 +159,7 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (err: any) {
-    console.error('Extractor upload error:', err);
-    return NextResponse.json({ error: 'Upload failed', message: err.message || 'Gagal memproses file di server' }, { status: 500 });
+    return safeErrorResponse(err, 'Gagal memproses file arsip di server.');
   }
 }
 

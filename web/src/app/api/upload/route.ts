@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { safeErrorResponse } from '@/utils/security';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 
@@ -42,7 +43,6 @@ export async function POST(req: NextRequest) {
       invalidLines: lines.length - validLines.length,
     });
   } catch (err: any) {
-    console.error('Upload error:', err);
-    return NextResponse.json({ error: 'Upload failed', details: err.message }, { status: 500 });
+    return safeErrorResponse(err, 'Gagal mengupload dan memproses file.');
   }
 }

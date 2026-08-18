@@ -48,7 +48,7 @@ def parse_db_config():
         "port": int(os.getenv("DB_PORT", 5432)),
         "dbname": os.getenv("DB_NAME", "vortx_db"),
         "user": os.getenv("DB_USER", "postgres"),
-        "password": os.getenv("DB_PASSWORD", "vortx_password123")
+        "password": os.getenv("DB_PASSWORD", "")
     }
 
 DB_CONFIG = parse_db_config()

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from "@/utils/prisma";
 import { getUser } from '@/utils/auth';
+import { safeErrorResponse } from '@/utils/security';
 
 export async function POST(req: Request) {
   try {
@@ -38,7 +39,6 @@ export async function POST(req: Request) {
       count: updated.count,
     });
   } catch (err: any) {
-    console.error('[Topup Cancel Error]:', err);
-    return NextResponse.json({ error: 'SERVER_ERROR', details: err.message }, { status: 500 });
+    return safeErrorResponse(err, 'Gagal membatalkan transaksi topup.');
   }
 }

@@ -4,6 +4,7 @@ import fs from 'fs';
 import AdmZip from 'adm-zip';
 import { getUser } from '@/utils/auth';
 import { prisma } from '@/utils/prisma';
+import { safeErrorResponse } from '@/utils/security';
 
 export const dynamic = 'force-dynamic';
 
@@ -257,7 +258,6 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (err: any) {
-    console.error('Extractor confirm error:', err);
-    return NextResponse.json({ error: 'SERVER_ERROR', message: err.message || 'Gagal memproses ekstraksi.' }, { status: 500 });
+    return safeErrorResponse(err, 'Gagal memproses ekstraksi file.');
   }
 }

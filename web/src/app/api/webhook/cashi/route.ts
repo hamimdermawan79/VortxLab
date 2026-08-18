@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from "@/utils/prisma";
+import { safeErrorResponse, sanitizeLogData } from "@/utils/security";
 import crypto from 'crypto';
 
 export async function POST(req: Request) {
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
     if (signature) {
       const computedSignature = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
       if (computedSignature.toLowerCase() !== signature.toLowerCase()) {
-        console.error('[Cashi Webhook Error]: Invalid signature', { received: signature, computed: computedSignature });
+        console.error('[Cashi Webhook Error]: Invalid signature verification attempt');
         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
       }
     } else {
@@ -33,7 +34,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
     }
 
-    console.log('[Cashi Webhook]: Received event:', payload);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Cashi Webhook]: Received event:', sanitizeLogData(payload));
+    }
 
     const event = payload.event || payload.type;
     const data = payload.data || payload;
@@ -72,15 +75,14 @@ export async function POST(req: Request) {
       });
 
       if (!result) {
-        console.log('[Cashi Webhook]: Order already processed or not found in pending state:', orderId);
+        console.log('[Cashi Webhook]: Order already processed or not pending:', orderId);
       } else {
-        console.log('[Cashi Webhook]: Payment completed for order:', orderId, 'amount:', result.amount);
+        console.log('[Cashi Webhook]: Payment completed for order:', orderId);
       }
     }
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    console.error('[Cashi Webhook Error]:', err);
-    return NextResponse.json({ error: 'Internal Server Error', details: err.message }, { status: 500 });
+    return safeErrorResponse(err, 'Internal Server Error');
   }
 }

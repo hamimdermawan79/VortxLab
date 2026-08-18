@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { getUser } from '@/utils/auth';
+import { safeErrorResponse } from '@/utils/security';
+
 export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const user = await getUser();
@@ -13,10 +16,10 @@ export async function GET() {
     });
     return NextResponse.json({ products, licenses });
   } catch (error: any) {
-    console.error('Admin Products GET Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return safeErrorResponse(error, 'Gagal memuat produk.');
   }
 }
+
 export async function POST(req: Request) {
   try {
     const user = await getUser();
@@ -26,7 +29,6 @@ export async function POST(req: Request) {
     await prisma.products.update({ where: { sku }, data: updates });
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error('Admin Products POST Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return safeErrorResponse(error, 'Gagal memperbarui produk.');
   }
 }

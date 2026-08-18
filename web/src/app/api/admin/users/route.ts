@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { getUser } from '@/utils/auth';
+import { safeErrorResponse } from '@/utils/security';
+
 export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const user = await getUser();
@@ -10,10 +13,10 @@ export async function GET() {
     const usersWithStatus = users.map((u: any) => ({ ...u, email: u.phone || "N/A", status: "active" }));
     return NextResponse.json(usersWithStatus);
   } catch (error: any) {
-    console.error("Admin Users GET Error:", error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return safeErrorResponse(error, 'Gagal memuat data pengguna.');
   }
 }
+
 export async function POST(req: Request) {
   try {
     const user = await getUser();
@@ -32,7 +35,6 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error: any) {
-    console.error("Admin Users POST Error:", error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return safeErrorResponse(error, 'Gagal memproses aksi pengguna.');
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/utils/auth";
 import { prisma } from "@/utils/prisma";
 import { checkSortirRateLimit } from "@/utils/rateLimiter";
+import { safeErrorResponse } from "@/utils/security";
 import { processSortirJobAsync } from "@/utils/sortirEngine";
 
 export const dynamic = "force-dynamic";
@@ -147,8 +148,7 @@ export async function POST(req: NextRequest) {
     response.headers.set("X-RateLimit-Remaining", rateCheck.remaining.toString());
     return response;
   } catch (err: any) {
-    console.error("Sortir Banned API Error:", err);
-    return NextResponse.json({ error: "SERVER_ERROR", message: err.message }, { status: 500 });
+    return safeErrorResponse(err, "Gagal memulai pemrosesan sortir banned.");
   }
 }
 
@@ -265,7 +265,6 @@ export async function DELETE(req: NextRequest) {
       refunded_amount: job.cost,
     });
   } catch (err: any) {
-    console.error("Sortir Banned Cancel Error:", err);
-    return NextResponse.json({ error: "CANCEL_ERROR", message: err.message }, { status: 500 });
+    return safeErrorResponse(err, "Gagal membatalkan proses sortir.");
   }
 }
