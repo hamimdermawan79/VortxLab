@@ -32,7 +32,7 @@ function scanFilesRecursively(dir: string, baseDir: string): any[] {
         id: relPath,
         name: file,
         relPath: relPath,
-        url: `/uploads/${relPath}`,
+        url: `/api/admin/files/download?file=${encodeURIComponent(relPath)}`,
         sizeBytes: stat.size,
         sizeFormatted: formatBytes(stat.size),
         createdAt: stat.birthtime.toISOString(),
@@ -51,7 +51,7 @@ export async function GET() {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
     }
 
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
+    const uploadsDir = path.join(process.cwd(), "private", "uploads");
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
@@ -82,7 +82,7 @@ export async function DELETE(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const { relPath, deleteAll } = body;
 
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
+    const uploadsDir = path.join(process.cwd(), "private", "uploads");
 
     if (deleteAll) {
       const dataDir = path.join(uploadsDir, "data");

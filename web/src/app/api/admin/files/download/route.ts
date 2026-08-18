@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "MISSING_FILE", message: "Parameter file diperlukan." }, { status: 400 });
     }
 
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
+    const uploadsDir = path.join(process.cwd(), "private", "uploads");
     const safePath = path.normalize(path.join(uploadsDir, relPath));
 
     if (!safePath.startsWith(uploadsDir)) {

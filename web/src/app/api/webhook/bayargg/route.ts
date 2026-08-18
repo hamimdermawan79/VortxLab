@@ -13,10 +13,20 @@ export async function POST(req: Request) {
     }
 
     const headerTimestamp = req.headers.get('X-Webhook-Timestamp') || req.headers.get('x-webhook-timestamp') || payload.timestamp;
+    // Validasi kesegaran timestamp untuk mencegah replay webhook lama.
+    const tsNum = parseInt(headerTimestamp, 10);
+    const MAX_SKEW_MS = 5 * 60 * 1000; // 5 menit
+    if (!Number.isFinite(tsNum) || Math.abs(Date.now() - tsNum) > MAX_SKEW_MS) {
+      console.error('Webhook Error: Stale or invalid timestamp', { headerTimestamp });
+      return NextResponse.json({ error: 'Invalid timestamp' }, { status: 401 });
+    }
     const signatureData = `${payload.invoice_id}|${payload.status}|${payload.final_amount}|${headerTimestamp}`;
     const expectedSignature = crypto.createHmac('sha256', secret).update(signatureData).digest('hex');
-    if (signature !== expectedSignature) {
-      console.error('Webhook Error: Invalid signature', { received: signature, expected: expectedSignature });
+    // ponytail: timingSafeEqual butuh panjang sama, cek dulu agar tidak throw
+    const sigBuf = Buffer.from(signature);
+    const expBuf = Buffer.from(expectedSignature);
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      console.error('Webhook Error: Invalid signature');
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 

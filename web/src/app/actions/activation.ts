@@ -5,7 +5,10 @@ import { getUser } from '@/utils/auth'
 import { prisma } from '@/utils/prisma'
 import crypto from 'crypto'
 
-const SECRET_SALT = "UdX1AfaEGsp3VXfkBhv42cYzce4Vf3PqJ516aTrhkFdAjbOpBCQLzoXrGdRryEwQ";
+// SECRET_SALT dipindah ke env. Nilai lama (hardcode di repo) SUDAH BOCOR — wajib rotasi.
+const rawSecret = process.env.LICENSE_SIGNING_SECRET;
+if (!rawSecret) throw new Error('LICENSE_SIGNING_SECRET is not set in environment variables');
+const SECRET_SALT: string = rawSecret;
 const NEW_ADMIN_TOOLS = ['mac-extractor', 'mac-splitter', 'nomac-extractor', 'xml-conf', 'result-proc'] as const;
 const LEGACY_TOOL = 'data-checker' as const;
 const VALID_GENERATOR_PRODUCTS: readonly string[] = [...NEW_ADMIN_TOOLS, LEGACY_TOOL];

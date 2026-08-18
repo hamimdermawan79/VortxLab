@@ -1,4 +1,5 @@
 import { prisma } from "@/utils/prisma";
+import { isAllowedWebhookUrl } from "@/utils/security";
 
 const ENGINE_1 = "https://www.toptoplink.com/web/rechargeOrder.do";
 const ENGINE_2 = "https://i.urzvz.com/web/rechargeOrder.do";
@@ -125,8 +126,8 @@ export async function processSortirJobAsync(
       },
     });
 
-    // Dispatch Webhook if provided
-    if (webhookUrl && webhookUrl.startsWith("http")) {
+    // Dispatch Webhook if provided (re-validasi anti-SSRF defense-in-depth)
+    if (webhookUrl && isAllowedWebhookUrl(webhookUrl)) {
       dispatchWebhook(webhookUrl, {
         event: "sortir.completed",
         activity_id: jobId,
