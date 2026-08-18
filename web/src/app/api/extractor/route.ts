@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
+import { mkdir, writeFile } from 'fs/promises';
+import { createWriteStream } from 'fs';
+import { pipeline } from 'stream/promises';
+import { Readable } from 'stream';
 import path from 'path';
 import { getUser } from '@/utils/auth';
 import { prisma } from '@/utils/prisma';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 120; // 2 minutes timeout for large file processing
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,35 +23,60 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    const formData = await req.formData();
-    const file = formData.get('file') as File | null;
-    if (!file) return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
-
-    if (!file.name.toLowerCase().endsWith('.zip')) {
-      return NextResponse.json({ error: 'INVALID_FORMAT', message: 'Hanya file .zip yang didukung saat ini' }, { status: 400 });
-    }
-
-    // Support large files up to 500MB
-    const MAX_SIZE = 500 * 1024 * 1024;
-    if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: 'FILE_TOO_LARGE', message: 'Maksimal ukuran file adalah 500MB' }, { status: 400 });
-    }
-
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Save stream directly to disk storage
+    const contentType = req.headers.get('content-type') || '';
     const timestamp = Date.now().toString();
     const saveDir = path.join(process.cwd(), 'public', 'uploads', 'data', timestamp);
     await mkdir(saveDir, { recursive: true });
-    const savePath = path.resolve(saveDir, file.name);
-    await writeFile(savePath, buffer);
+
+    let filename = `archive_${timestamp}.zip`;
+    let savePath = path.resolve(saveDir, filename);
+
+    // MODE 1: Direct Binary Stream (Bypasses Next.js 10MB FormData limits, zero memory leak)
+    if (contentType.includes('application/octet-stream') || req.headers.get('x-filename')) {
+      const headerName = req.headers.get('x-filename');
+      if (headerName) {
+        try {
+          filename = decodeURIComponent(headerName);
+        } catch {
+          filename = headerName;
+        }
+      }
+      if (!filename.toLowerCase().endsWith('.zip')) {
+        filename += '.zip';
+      }
+
+      savePath = path.resolve(saveDir, filename);
+
+      if (!req.body) {
+        return NextResponse.json({ error: 'NO_BODY', message: 'Tidak ada data file dalam request.' }, { status: 400 });
+      }
+
+      // @ts-ignore
+      const nodeReadable = Readable.fromWeb(req.body);
+      await pipeline(nodeReadable, createWriteStream(savePath));
+    }
+    // MODE 2: Standard FormData Upload (Fallback)
+    else {
+      const formData = await req.formData();
+      const file = formData.get('file') as File | null;
+      if (!file) return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
+
+      filename = file.name;
+      if (!filename.toLowerCase().endsWith('.zip')) {
+        return NextResponse.json({ error: 'INVALID_FORMAT', message: 'Hanya file .zip yang didukung saat ini' }, { status: 400 });
+      }
+
+      savePath = path.resolve(saveDir, filename);
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      await writeFile(savePath, buffer);
+    }
 
     // Create job record for Python worker to process
     const job = await prisma.extractor_jobs.create({
       data: {
         user_id: user.id,
-        original_name: file.name,
+        original_name: filename,
         total_conf: 0,
         total_extracted: 0,
         dup_removed: 0,
@@ -65,7 +94,7 @@ export async function POST(req: NextRequest) {
 
   } catch (err: any) {
     console.error('Extractor upload error:', err);
-    return NextResponse.json({ error: 'Upload failed', message: err.message || 'Gagal menyimpan file di server' }, { status: 500 });
+    return NextResponse.json({ error: 'Upload failed', message: err.message || 'Gagal memproses file di server' }, { status: 500 });
   }
 }
 

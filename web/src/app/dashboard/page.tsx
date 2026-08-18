@@ -900,18 +900,24 @@ function DataExtractorView({
     setFile(f);
     setStatus("uploading");
     setStats(null);
-    const formData = new FormData();
-    formData.append("file", f);
-
     try {
-      const res = await fetch("/api/extractor", { method: "POST", body: formData });
+      // Direct binary streaming upload: Bypass Next.js FormData 10MB limit & supports large files
+      const res = await fetch("/api/extractor", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "X-Filename": encodeURIComponent(f.name),
+        },
+        body: f, // Raw File stream
+      });
+
       let data: any = {};
       try {
         data = await res.json();
       } catch {
         throw new Error(
           res.status === 413
-            ? "Ukuran file terlalu besar (melebihi limit upload server/Cloudflare 100MB)"
+            ? "Ukuran file terlalu besar (melebihi limit upload Cloudflare/server 100MB)"
             : `Gagal mengunggah file ke server (HTTP ${res.status})`
         );
       }
