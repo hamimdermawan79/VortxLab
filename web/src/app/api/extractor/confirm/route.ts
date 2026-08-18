@@ -22,6 +22,40 @@ function extractIdsFromContent(content: string, minLen = 6, maxLen = 9): string[
   return extracted;
 }
 
+function extractValidPasswords(content: string): string[] {
+  const passwords: string[] = [];
+  const seen = new Set<string>();
+
+  // 1. Direct regex for AF1 strings (standard encrypted Higgs password prefix)
+  const af1Regex = /\b(AF1[A-Za-z0-9+/=_-]+)\b/gi;
+  let af1Match;
+  while ((af1Match = af1Regex.exec(content)) !== null) {
+    const val = af1Match[1].trim();
+    if (val && !seen.has(val)) {
+      seen.add(val);
+      passwords.push(val);
+    }
+  }
+
+  // 2. Explicit hw_account_password_X matches
+  const pwRegex = /hw_account_password_\d*(?:["']?\s*>\s*|\s*=\s*|\s*:\s*)([^\s<"']+)/gi;
+  let pwMatch;
+  while ((pwMatch = pwRegex.exec(content)) !== null) {
+    const val = pwMatch[1].trim();
+    // Discard if it looks like a variable/key name (e.g. hw_account_type_1)
+    if (/^(hw_|local_|device_|type_|account_|user_|package_)/i.test(val)) {
+      continue;
+    }
+    // Only accept if it starts with AF1
+    if (val.toUpperCase().startsWith('AF1') && !seen.has(val)) {
+      seen.add(val);
+      passwords.push(val);
+    }
+  }
+
+  return passwords;
+}
+
 function parseConfigFileOffline(content: string): Array<{ id: string; pw: string; mac: string }> {
   let mac = '';
   const macMatch = content.match(/local_mac_addr\s*=\s*([A-Fa-f0-9:]+)/i) ||
@@ -31,12 +65,7 @@ function parseConfigFileOffline(content: string): Array<{ id: string; pw: string
     mac = (macMatch[1] || macMatch[0]).trim();
   }
 
-  const passwords: string[] = [];
-  const pwRegex = /hw_account_password_\d*(?:["']?\s*>\s*|\s*=\s*|\s*:\s*)([^\s<"']+)/gi;
-  let pwMatch;
-  while ((pwMatch = pwRegex.exec(content)) !== null) {
-    if (pwMatch[1]) passwords.push(pwMatch[1].trim());
-  }
+  const passwords = extractValidPasswords(content);
 
   const explicitIds: string[] = [];
   const idRegex = /hw_account_id_\d*(?:["']?\s*>\s*|\s*=\s*|\s*:\s*)(\d+)/gi;

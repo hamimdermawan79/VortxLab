@@ -339,16 +339,38 @@ def extract_ids_from_content(content, min_len=6, max_len=9):
             extracted_ids.append(number)
     return extracted_ids
 
+def extract_valid_passwords_py(content):
+    passwords = []
+    seen = set()
+    
+    # 1. Direct regex for AF1 strings (standard encrypted Higgs password prefix)
+    for m in re.finditer(r'\b(AF1[A-Za-z0-9+/=_-]+)\b', content, re.IGNORECASE):
+        val = m.group(1).strip()
+        if val and val not in seen:
+            seen.add(val)
+            passwords.append(val)
+            
+    # 2. Explicit hw_account_password_X matches
+    explicit_pw = re.findall(r'hw_account_password_\d*(?:[\'"]?\s*>\s*|\s*=\s*|\s*:\s*)([^\s<"\']+)', content, re.IGNORECASE)
+    for p in explicit_pw:
+        val = p.strip()
+        if re.match(r'^(hw_|local_|device_|type_|account_|user_|package_)', val, re.IGNORECASE):
+            continue
+        if val.upper().startswith("AF1") and val not in seen:
+            seen.add(val)
+            passwords.append(val)
+            
+    return passwords
+
 def parse_config_file_improved(content):
     """
     Parse konten config secara OFFLINE (Sesuai Mode 2 processor.py):
     - Ekstrak local_mac_addr (jika tidak ada MAC, TIDAK diskip, melainkan mac = 'NO_MAC')
-    - Ekstrak semua hw_account_password_X
+    - Ekstrak semua password valid (berawalan AF1)
     - Ekstrak semua ID (hw_account_id_X atau angka 6-9 digit)
     - Buat kombinasi ID x Passwords (1 ID dengan >1 password menghasilkan entri berbeda)
     """
     mac_addr = ""
-    passwords = []
     
     # 1. Cari MAC Address (tetap valid jika tidak ada)
     mac_match = re.search(r"local_mac_addr\s*=\s*([A-Fa-f0-9:]+)", content, re.IGNORECASE)
@@ -363,10 +385,8 @@ def parse_config_file_improved(content):
             if gen_mac:
                 mac_addr = gen_mac.group(0).strip()
 
-    # 2. Cari semua password (hw_account_password_0, hw_account_password_1, dst)
-    passwords = re.findall(r"hw_account_password_\d*\s*=\s*([A-Fa-f0-9]+)", content, re.IGNORECASE)
-    if not passwords:
-        passwords = re.findall(r'hw_account_password_\d*(?:["\']?\s*>\s*|\s*=\s*|\s*:\s*)([^\s<"\']+)', content, re.IGNORECASE)
+    # 2. Cari semua password valid (hanya yang berawalan AF1)
+    passwords = extract_valid_passwords_py(content)
 
     # 3. Cari account ID eksplisit
     explicit_ids = re.findall(r"hw_account_id_\d*\s*=\s*(\d+)", content, re.IGNORECASE)
@@ -380,7 +400,7 @@ def parse_config_file_improved(content):
     else:
         account_ids = extract_ids_from_content(content, min_len=6, max_len=9)
 
-    # Jika ada ID namun tidak ada field password eksplisit, isi string kosong agar ID tetap diproses
+    # Jika ada ID namun tidak ada field password valid, isi string kosong agar ID tetap diproses
     if account_ids and not passwords:
         passwords = [""]
 
