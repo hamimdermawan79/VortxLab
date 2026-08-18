@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/utils/prisma";
 import crypto from "crypto";
+import { checkTrackRateLimit } from "@/utils/rateLimiter";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,12 @@ export async function POST(req: NextRequest) {
 
     // Anonymized hash for unique visitor tracking (GDPR/Privacy friendly)
     const ipHash = crypto.createHash("sha256").update(ip + userAgent.substring(0, 50)).digest("hex").substring(0, 32);
+
+    // Rate-limit per-ip-hash: cegah DB flood via /api/track spam.
+    const rl = checkTrackRateLimit(ipHash);
+    if (!rl.allowed) {
+      return NextResponse.json({ success: false }, { status: 429 });
+    }
 
     await prisma.visitor_logs.create({
       data: {
