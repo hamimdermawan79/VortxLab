@@ -1,0 +1,6 @@
+# Format Proxy:
+# http://user:pass@host:port
+# http://host:port
+# socks5://user:pass@host:port
+# Contoh (CLIProxy Indonesia Rotating Proxy):
+# http://username:password@sg.cliproxy.io:3010

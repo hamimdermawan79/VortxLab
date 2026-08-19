@@ -87,6 +87,14 @@ const FEATURES_LIST = [
     actionText: "Unduh App",
     actionUrl: "/dashboard?tab=higgs&sub=checker",
   },
+  {
+    id: "headless-checker",
+    title: "Headless Data Checker",
+    desc: "Pengecekan akun lokal tanpa emulator dengan kapabilitas bulk processing cloud ultra-cepat.",
+    icon: <Cpu size={18} className="text-[#e26d40]" />,
+    actionText: "Lihat Fitur (Soon)",
+    actionUrl: "/dashboard?tab=higgs&tool=headless-checker",
+  },
 ];
 
 export default function Home() {
