@@ -135,7 +135,8 @@ def load_proxy_pool():
 
     unique_proxies = list(dict.fromkeys(proxies))
     if not unique_proxies:
-        print("[Proxy Manager] Running in Direct IP mode (Fast & Reliable).")
+        print("[Proxy Manager] ⚠️ WARNING: ROTATING_PROXY_URL is not set. Running in Direct IP mode.")
+        print("[Proxy Manager] ⚠️ Note: VPS Datacenter IPs may be blocked by Cloudflare (HTTP 403). Set ROTATING_PROXY_URL in web/.env for best performance.")
         return []
 
     print(f"[Proxy Manager] Pre-flight testing {len(unique_proxies)} candidate proxies...")
@@ -429,7 +430,10 @@ def sortir_worker_task(job_id, ids, raw_job_data=None):
                 print(f"[Sortir Engine] Webhook error: {we}")
 
         duration = round(time.time() - startTime, 2)
-        print(f"[Sortir Engine] Job {job_id} Completed in {duration}s | Aman: {len(final_results['aman'])}, Banned: {len(final_results['banned'])}")
+        err_count = len(final_results.get("error", []))
+        print(f"[Sortir Engine] Job {job_id} Completed in {duration}s | Aman: {len(final_results['aman'])}, Banned: {len(final_results['banned'])}, Error/Blocked: {err_count}")
+        if err_count > 0 and not PROXY_POOL:
+            print(f"[Sortir Engine] ⚠️ {err_count} IDs failed due to WAF/IP Block. Please configure ROTATING_PROXY_URL in web/.env to enable residential proxy.")
 
     except Exception as outer_e:
         print(f"[Sortir Engine] Job {job_id} Failure: {outer_e}")
