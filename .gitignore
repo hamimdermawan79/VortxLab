@@ -27,6 +27,8 @@ web/private/uploads/
 web/.env
 web/.env*.local
 web/.env.local
+proxies.txt
+daemons/proxies.txt
 
 # Python
 .venv/

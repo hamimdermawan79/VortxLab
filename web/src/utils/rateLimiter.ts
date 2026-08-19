@@ -160,7 +160,7 @@ export function checkRegisterRateLimit(
   return { allowed: true, retryAfterSeconds: 0 };
 }
 
-// 1. Rate Limiter for Sortir Banned (Max 20 IDs per request, Unlimited Throughput)
+// 1. Rate Limiter for Sortir Banned (Max 100,000 IDs per bulk job, Unlimited Throughput)
 export function checkSortirRateLimit(
   userId: string,
   requestedCount: number
@@ -171,7 +171,7 @@ export function checkSortirRateLimit(
   retryAfterSeconds: number;
   error?: string;
 } {
-  const MAX_PER_REQUEST = 20;
+  const MAX_PER_REQUEST = 100000;
 
   if (requestedCount > MAX_PER_REQUEST) {
     return {
@@ -179,7 +179,7 @@ export function checkSortirRateLimit(
       limit: MAX_PER_REQUEST,
       remaining: 0,
       retryAfterSeconds: 0,
-      error: `BATCH_SIZE_EXCEEDED: Maksimal ${MAX_PER_REQUEST} ID per single request API. Silakan pecah payload Anda menjadi batch maksimal 20 ID.`,
+      error: `BATCH_SIZE_EXCEEDED: Maksimal ${MAX_PER_REQUEST.toLocaleString()} ID per single job. Silakan perkecil ukuran batch Anda.`,
     };
   }
 
