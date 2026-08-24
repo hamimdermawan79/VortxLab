@@ -1,9 +1,14 @@
 import { cookies, headers } from "next/headers";
 import { jwtVerify } from "jose";
+import crypto from "crypto";
 import { prisma } from "./prisma";
 import { getJwtSecret } from "./jwt";
 
 export { getJwtSecret };
+
+export function hashApiKey(key: string): string {
+  return crypto.createHash("sha256").update(key).digest("hex");
+}
 
 export async function getUser(): Promise<{
   id: string;
@@ -42,10 +47,18 @@ export async function getUser(): Promise<{
     // 2. If JWT fails and it came from Authorization header, check database API Keys
     if (isFromHeader) {
       try {
-        const apiKey = await prisma.api_keys.findUnique({
-          where: { key: token, is_active: true },
+        // Lookup prioritas: hash (key baru, aman). Fallback plaintext (key lama legacy).
+        // ponytail: dual-lookup backward-compat untuk key lama yang belum di-hash.
+        let apiKey = await prisma.api_keys.findUnique({
+          where: { key_hash: hashApiKey(token), is_active: true },
           include: { profile: true },
         });
+        if (!apiKey) {
+          apiKey = await prisma.api_keys.findUnique({
+            where: { key: token, is_active: true },
+            include: { profile: true },
+          });
+        }
 
         if (apiKey && apiKey.profile) {
           // Update last_used timestamp asynchronously

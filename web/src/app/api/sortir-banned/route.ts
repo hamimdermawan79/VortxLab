@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/utils/auth";
 import { prisma } from "@/utils/prisma";
 import { checkSortirRateLimit } from "@/utils/rateLimiter";
-import { safeErrorResponse } from "@/utils/security";
-import { processSortirJobAsync } from "@/utils/sortirEngine";
+import { safeErrorResponse, isAllowedWebhookUrl } from "@/utils/security";
+import { processSortirJobAsync, parseSortirIds } from "@/utils/sortirEngine";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -37,6 +37,18 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const { ids, webhook_url } = body;
 
+    // Validasi webhook_url untuk mencegah SSRF (tolak private/loopback/metadata).
+    let safeWebhookUrl: string | null = null;
+    if (webhook_url) {
+      if (typeof webhook_url !== "string" || !isAllowedWebhookUrl(webhook_url)) {
+        return NextResponse.json(
+          { error: "INVALID_WEBHOOK_URL", message: "URL webhook harus https dan bukan host internal/private." },
+          { status: 400 }
+        );
+      }
+      safeWebhookUrl = webhook_url;
+    }
+
     if (!Array.isArray(ids) || ids.length === 0) {
       return NextResponse.json(
         { error: "INVALID_IDS", message: "Parameter 'ids' harus berupa array ID string yang tidak kosong." },
@@ -44,10 +56,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Clean & format IDs
+    // Clean & extract numeric IDs robustly from any format (plain ID, ID: ... PW: ..., ID|PW|MAC, etc.)
     const cleanIds = ids
-      .map((x) => String(x).trim())
-      .filter((x) => /^\d+$/.test(x));
+      .flatMap((item) => parseSortirIds(String(item)))
+      .filter((id) => /^\d{5,12}$/.test(id));
 
     if (cleanIds.length === 0) {
       return NextResponse.json(
@@ -56,14 +68,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Single Request Batch Limit (Max 20 IDs per request)
+    // 1. Single Request Batch Limit (Max 100,000 IDs per job)
     const rateCheck = checkSortirRateLimit(user.id, cleanIds.length);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         {
           error: "BATCH_SIZE_EXCEEDED",
-          message: rateCheck.error || "Maksimal 20 ID per pemanggilan request API. Silakan bagi request Anda menjadi batch maksimal 20 ID.",
-          max_allowed: 20,
+          message: rateCheck.error || `Maksimal ${rateCheck.limit.toLocaleString()} ID per pemanggilan.`,
+          max_allowed: rateCheck.limit,
           received_count: cleanIds.length,
         },
         { status: 400 }
@@ -80,7 +92,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error: "INSUFFICIENT_BALANCE",
-          message: `Saldo token tidak mencukupi. Diperlukan ${totalCost} token (${costPerId} token/ID x ${cleanIds.length} ID), saldo akun Anda saat ini ${profile?.vcoin_balance || 0} token.`,
+          message: `Saldo token tidak mencukupi. Diperlukan ${totalCost.toLocaleString()} token (${costPerId} token/ID x ${cleanIds.length.toLocaleString()} ID), saldo akun Anda saat ini ${(profile?.vcoin_balance || 0).toLocaleString()} token.`,
           required_tokens: totalCost,
           cost_per_id: costPerId,
           total_ids: cleanIds.length,
@@ -106,7 +118,7 @@ export async function POST(req: NextRequest) {
             ids_count: cleanIds.length,
             cost_per_id: costPerId,
             is_api: isApi,
-            webhook_url: webhook_url || null,
+            webhook_url: safeWebhookUrl || null,
           },
         },
       }),
@@ -118,7 +130,7 @@ export async function POST(req: NextRequest) {
           status: "pending",
           raw_results: {
             ids: cleanIds,
-            webhook_url: webhook_url || null,
+            webhook_url: safeWebhookUrl || null,
           },
           current_index: 0,
         },
@@ -127,21 +139,18 @@ export async function POST(req: NextRequest) {
 
     const createdJob = result[2];
 
-    // 4. Trigger Async Engine in background (with Webhook dispatch support)
-    processSortirJobAsync(createdJob.id, cleanIds, webhook_url);
-
     const response = NextResponse.json({
       success: true,
       activity_id: createdJob.id,
       total_ids: cleanIds.length,
       cost_per_id: costPerId,
       cost: totalCost,
-      remaining_token: profile.vcoin_balance - totalCost,
-      webhook_registered: !!webhook_url,
+      remaining_token: (profile?.vcoin_balance || 0) - totalCost,
+      webhook_registered: !!safeWebhookUrl,
       rate_limit: {
         remaining_ids_this_minute: rateCheck.remaining,
       },
-      message: "Proses sortir ID berhasil dimulai. Hasil akan dikirimkan ke webhook (jika ada) atau dapat dipoll via GET /api/sortir-banned.",
+      message: "Proses sortir ID berhasil dimulai sebagai 1 Job antrean engine. Progres dapat dipantau langsung via SSE stream atau GET /api/sortir-banned.",
     });
 
     response.headers.set("X-RateLimit-Limit", rateCheck.limit.toString());
@@ -180,6 +189,11 @@ export async function GET(req: NextRequest) {
 
     const rawRes = (job.raw_results as any) || {};
 
+    const amanList = Array.isArray(rawRes.aman) ? rawRes.aman : [];
+    const bannedList = Array.isArray(rawRes.banned) ? rawRes.banned : [];
+    const interimAmanCount = typeof rawRes.aman_count === "number" ? rawRes.aman_count : amanList.length;
+    const interimBannedCount = typeof rawRes.banned_count === "number" ? rawRes.banned_count : bannedList.length;
+
     const responsePayload: any = {
       activity_id: job.id,
       status: job.status,
@@ -187,18 +201,18 @@ export async function GET(req: NextRequest) {
       total_ids: job.total_ids || 0,
       progress_percent: job.total_ids > 0 ? Math.round(((job.current_index || 0) / job.total_ids) * 100) : 0,
       created_at: job.created_at,
+      summary: {
+        total_aman: interimAmanCount,
+        total_banned: interimBannedCount,
+      },
+      recent_stream: Array.isArray(rawRes.recent_stream) ? rawRes.recent_stream : [],
+      raw_results: {
+        aman: amanList,
+        banned: bannedList,
+      },
+      aman_ids: amanList,
+      banned_ids: bannedList,
     };
-
-    if (job.status === "completed" || job.status === "failed") {
-      responsePayload.raw_results = {
-        aman: rawRes.aman || [],
-        banned: rawRes.banned || [],
-      };
-      responsePayload.summary = {
-        total_aman: (rawRes.aman || []).length,
-        total_banned: (rawRes.banned || []).length,
-      };
-    }
 
     const response = NextResponse.json(responsePayload);
     response.headers.set("Cache-Control", "no-store, max-age=0, must-revalidate");
@@ -239,30 +253,14 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "JOB_NOT_CANCELLABLE", message: "Pekerjaan sudah selesai atau gagal." }, { status: 400 });
     }
 
-    await prisma.$transaction([
-      prisma.sortir_banned_jobs.update({
-        where: { id: activityId },
-        data: { status: "failed" },
-      }),
-      prisma.profiles.update({
-        where: { id: user.id },
-        data: { vcoin_balance: { increment: job.cost } },
-      }),
-      prisma.transactions.create({
-        data: {
-          user_id: user.id,
-          type: "refund-sortir-banned",
-          amount: job.cost,
-          status: "completed",
-          meta_data: { refunded_job_id: activityId },
-        },
-      }),
-    ]);
+    await prisma.sortir_banned_jobs.update({
+      where: { id: activityId },
+      data: { status: "failed" },
+    });
 
     return NextResponse.json({
       success: true,
-      message: "Pekerjaan berhasil dibatalkan dan saldo token telah dikembalikan.",
-      refunded_amount: job.cost,
+      message: "Pekerjaan berhasil dibatalkan. Sesuai ketentuan, saldo token yang telah dipotong tidak dikembalikan.",
     });
   } catch (err: any) {
     return safeErrorResponse(err, "Gagal membatalkan proses sortir.");

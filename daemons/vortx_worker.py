@@ -72,22 +72,94 @@ DB_CONFIG = parse_db_config()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-UPLOADS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "public", "uploads")
+# Folder uploads KONSISTEN dengan web runtime: env UPLOADS_DIR (dari .env/ecosystem) > default web/private/uploads
+UPLOADS_DIR = os.getenv("UPLOADS_DIR") or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "private", "uploads")
 
 # Concurrency settings for Sortir Banned
-MASTER_WORKER_SLOTS = 10
-INNER_CONCURRENCY = 20
-THROTTLE_DELAY = 0.02
+MASTER_WORKER_SLOTS = 5
+INNER_CONCURRENCY = 30
+THROTTLE_DELAY = 0.01
 HEARTBEAT_INTERVAL = 10
 
-ENGINE_1 = "https://www.toptoplink.com/web/rechargeOrder.do"
-ENGINE_2 = "https://i.urzvz.com/web/rechargeOrder.do"
+ACTIVE_ENDPOINTS = [
+    "https://www.topbos.com/web/rechargeOrder.do",
+    "https://www.toptoplink.com/web/rechargeOrder.do",
+    "https://www.bosbosgames.com/web/rechargeOrder.do",
+]
 MAINTENANCE_MSG = "Sistem sedang dalam maintenance."
+
+# --- PROXY POOL MANAGER ---
+def validate_proxy(p):
+    try:
+        r = requests.post(
+            "https://www.topbos.com/web/rechargeOrder.do",
+            data="userId=37487886&costKey=com.neptune.domino.coincard0035&languageType=2&infullType=40&timestamp=1700000000000",
+            headers={"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "User-Agent": "Mozilla/5.0"},
+            proxies={"http": p, "https": p},
+            timeout=2.5
+        )
+        if r.status_code == 200 and '"code"' in r.text:
+            return p
+    except Exception:
+        pass
+    return None
+
+def load_proxy_pool():
+    proxies = []
+    env_proxy = os.getenv("ROTATING_PROXY_URL")
+    if env_proxy and env_proxy.strip():
+        proxies.append(env_proxy.strip())
+
+    proxy_files = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "proxies.txt"),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "proxies.txt"),
+        "proxies.txt"
+    ]
+    for pf in proxy_files:
+        if os.path.exists(pf):
+            try:
+                with open(pf, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#"):
+                            if "://" not in line:
+                                parts = line.split(":")
+                                if len(parts) == 4:
+                                    line = f"http://{parts[2]}:{parts[3]}@{parts[0]}:{parts[1]}"
+                                elif len(parts) == 2:
+                                    line = f"http://{parts[0]}:{parts[1]}"
+                                else:
+                                    line = f"http://{line}"
+                            proxies.append(line)
+            except Exception as e:
+                print(f"[Proxy Manager] Warning reading {pf}: {e}")
+
+    unique_proxies = list(dict.fromkeys(proxies))
+    if not unique_proxies:
+        print("[Proxy Manager] ⚠️ WARNING: ROTATING_PROXY_URL is not set. Running in Direct IP mode.")
+        print("[Proxy Manager] ⚠️ Note: VPS Datacenter IPs may be blocked by Cloudflare (HTTP 403). Set ROTATING_PROXY_URL in web/.env for best performance.")
+        return []
+
+    print(f"[Proxy Manager] Pre-flight testing {len(unique_proxies)} candidate proxies...")
+    verified = []
+    with ThreadPoolExecutor(max_workers=min(15, len(unique_proxies))) as ex:
+        for p in ex.map(validate_proxy, unique_proxies):
+            if p:
+                verified.append(p)
+
+    if verified:
+        print(f"[Proxy Manager] {len(verified)} / {len(unique_proxies)} proxies passed pre-flight health check.")
+    else:
+        print(f"[Proxy Manager] All {len(unique_proxies)} candidate proxies failed/dead. Falling back to Direct IP mode.")
+    return verified
+
+PROXY_POOL = load_proxy_pool()
 
 # Session pooling for HTTP requests
 session = requests.Session()
-adapter = requests.adapters.HTTPAdapter(pool_connections=50, pool_maxsize=100)
+adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=200)
 session.mount('https://', adapter)
+session.mount('http://', adapter)
 
 db_pool = None
 
@@ -112,29 +184,63 @@ def put_conn(conn):
 
 
 # =================== 1. SORTIR BANNED ENGINE ===================
-def send_sortir_request(user_id, endpoint):
+def send_sortir_request(user_id, endpoint, proxy_url=None):
     payload = f"userId={user_id}&costKey=com.neptune.domino.coincard0035&languageType=2&infullType=40&timestamp={int(time.time() * 1000)}"
     headers = {
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "X-Requested-With": "XMLHttpRequest",
-        "User-Agent": "VortX-Master-Engine-Burst/8.0 (Linux-High-Throughput)",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     }
+    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
     try:
-        resp = session.post(endpoint, data=payload, headers=headers, timeout=12)
+        resp = session.post(endpoint, data=payload, headers=headers, proxies=proxies, timeout=3.5)
         if resp.status_code == 200:
-            return {"status": 200, "data": resp.json()}
-        return {"status": resp.status_code, "error": "Blocked"}
+            try:
+                return {"status": 200, "data": resp.json()}
+            except Exception:
+                return {"status": 200, "data": None, "error": "InvalidJSON"}
+        return {"status": resp.status_code, "error": "BlockedOrError"}
     except Exception as e:
         return {"status": 500, "error": str(e)}
 
-def process_single_id(uid, fallback_mode=False):
-    endpoint = ENGINE_2 if fallback_mode else ENGINE_1
-    res = send_sortir_request(uid, endpoint)
-    if not fallback_mode and res["status"] in [403, 429]:
-        res = send_sortir_request(uid, ENGINE_2)
-    time.sleep(THROTTLE_DELAY)
-    msg = res.get("data", {}).get("message", "")
-    return {"id": uid, "status": "Banned" if msg == MAINTENANCE_MSG else "AMAN"}
+def process_single_id_rolling(uid, endpoint_idx, retry_count=0):
+    if THROTTLE_DELAY > 0:
+        time.sleep(THROTTLE_DELAY)
+
+    endpoint = ACTIVE_ENDPOINTS[endpoint_idx % len(ACTIVE_ENDPOINTS)]
+    proxy_url = PROXY_POOL[endpoint_idx % len(PROXY_POOL)] if PROXY_POOL else None
+    res = send_sortir_request(uid, endpoint, proxy_url)
+
+    if res.get("status") == 200 and isinstance(res.get("data"), dict):
+        data = res["data"]
+        code = str(data.get("code", ""))
+        msg = str(data.get("message", ""))
+
+        # 1. BANNED CHECK
+        if code == "1125" or msg == MAINTENANCE_MSG:
+            return {"id": uid, "status": "Banned"}
+
+        # 2. AMAN CHECK
+        if code == "0" and (data.get("data") is not None or msg == ""):
+            return {"id": uid, "status": "AMAN"}
+
+        # 3. NOT FOUND / INVALID ID (code 301 = Pengguna tidak ada, 1121 = Kesalahan ID)
+        if code in ["301", "1121"] or "tidak ada" in msg.lower() or "kesalahan id" in msg.lower():
+            return {"id": uid, "status": "Banned"}
+
+        # 4. RATE LIMIT CODE 1025 (Permintaan terlalu sering)
+        if code == "1025" or "terlalu sering" in msg.lower():
+            if retry_count < 5:
+                backoff = 2.0 + (retry_count * 2.0)
+                time.sleep(backoff)
+                return process_single_id_rolling(uid, endpoint_idx + 1, retry_count + 1)
+
+    # 5. IF SERVER/NETWORK ERROR OR WAF BLOCK (429, 403, 500, 999, etc.) -> RETRY ON NEXT ENDPOINT/PROXY
+    if retry_count < 4:
+        time.sleep(0.5 + (retry_count * 0.5))
+        return process_single_id_rolling(uid, endpoint_idx + 1, retry_count + 1)
+
+    return {"id": uid, "status": "Error"}
 
 def db_claim_sortir_job():
     conn = get_conn()
@@ -168,33 +274,67 @@ def db_claim_sortir_job():
     finally:
         put_conn(conn)
 
-def db_update_sortir_progress(job_id, current_index):
+def db_check_job_status(job_id):
     conn = get_conn()
     try:
         with conn.cursor() as cur:
+            cur.execute("SELECT status FROM sortir_banned_jobs WHERE id = %s", (job_id,))
+            row = cur.fetchone()
+            if row:
+                return row[0]
+    except Exception as e:
+        print(f"[Worker] Error checking status for {job_id}: {e}")
+    finally:
+        put_conn(conn)
+    return "unknown"
+
+def db_update_sortir_progress(job_id, current_index, aman_list, banned_list, recent_stream, base_raw=None):
+    conn = get_conn()
+    try:
+        updated_raw = base_raw.copy() if isinstance(base_raw, dict) else {}
+        updated_raw["aman_count"] = len(aman_list)
+        updated_raw["banned_count"] = len(banned_list)
+        updated_raw["aman"] = aman_list[-100:]
+        updated_raw["banned"] = banned_list[-100:]
+        updated_raw["recent_stream"] = recent_stream[-15:]
+
+        with conn.cursor() as cur:
             cur.execute(
-                "UPDATE sortir_banned_jobs SET current_index = %s WHERE id = %s",
-                (current_index, job_id)
+                """
+                UPDATE sortir_banned_jobs
+                SET current_index = %s,
+                    raw_results = %s
+                WHERE id = %s
+                """,
+                (current_index, psycopg2.extras.Json(updated_raw), job_id)
             )
         conn.commit()
-    except Exception:
+    except Exception as e:
         conn.rollback()
     finally:
         put_conn(conn)
 
-def db_finalize_sortir_job(job_id, final_results, total_ids):
+def db_finalize_sortir_job(job_id, final_results, total_ids, webhook_url=None):
     conn = get_conn()
     try:
+        final_payload = {
+            "aman": final_results["aman"],
+            "banned": final_results["banned"],
+            "error": final_results.get("error", []),
+            "aman_count": len(final_results["aman"]),
+            "banned_count": len(final_results["banned"]),
+            "webhook_url": webhook_url
+        }
         with conn.cursor() as cur:
             cur.execute("""
                 UPDATE sortir_banned_jobs
                 SET status = 'completed',
                     current_index = %s,
                     raw_results = %s
-                WHERE id = %s
+                WHERE id = %s AND status NOT IN ('failed', 'cancelled')
             """, (
                 total_ids,
-                psycopg2.extras.Json(final_results),
+                psycopg2.extras.Json(final_payload),
                 job_id
             ))
         conn.commit()
@@ -208,37 +348,77 @@ def sortir_worker_task(job_id, ids, raw_job_data=None):
     try:
         startTime = time.time()
         print(f"[Sortir Engine] Processing Job {job_id} | Total IDs: {len(ids)}")
-        final_results = {"aman": [], "banned": []}
+        final_results = {"aman": [], "banned": [], "error": []}
         total_ids = len(ids)
         processed_count = 0
+        recent_stream = []
+        webhook_url = raw_job_data.get("webhook_url") if isinstance(raw_job_data, dict) else None
 
-        with ThreadPoolExecutor(max_workers=INNER_CONCURRENCY) as task_executor:
-            futures = {task_executor.submit(process_single_id, uid, False): uid for uid in ids}
-            for future in as_completed(futures):
+        with ThreadPoolExecutor(max_workers=INNER_CONCURRENCY) as executor:
+            future_to_idx = {executor.submit(process_single_id_rolling, uid, i): (i, uid) for i, uid in enumerate(ids)}
+            for future in as_completed(future_to_idx):
+                processed_count += 1
                 try:
                     res = future.result()
-                    processed_count += 1
-                    if res["status"] == "AMAN":
+                    status = res.get("status", "Error")
+                    if status == "AMAN":
                         final_results["aman"].append(res["id"])
-                    else:
+                    elif status == "Banned":
                         final_results["banned"].append(res["id"])
+                    else:
+                        final_results["error"].append(res["id"])
 
-                    if processed_count % HEARTBEAT_INTERVAL == 0 or processed_count == total_ids:
-                        db_update_sortir_progress(job_id, processed_count)
+                    recent_stream.append({"id": res["id"], "status": status})
+                    if len(recent_stream) > 20:
+                        recent_stream.pop(0)
+
+                    step = 1 if total_ids <= 20 else (5 if total_ids <= 200 else min(25, max(5, total_ids // 50)))
+                    if processed_count % step == 0 or processed_count == total_ids:
+                        # Check if job was cancelled from UI
+                        job_st = db_check_job_status(job_id)
+                        if job_st in ("failed", "cancelled"):
+                            print(f"[Sortir Engine] Job {job_id} was CANCELLED by user. Aborting remaining {total_ids - processed_count} IDs immediately...")
+                            executor.shutdown(wait=False, cancel_futures=True)
+                            return
+
+                        db_update_sortir_progress(
+                            job_id,
+                            processed_count,
+                            final_results["aman"],
+                            final_results["banned"],
+                            recent_stream,
+                            raw_job_data
+                        )
+
+                    # Print live console progress every 50 IDs (or at completion)
+                    log_interval = 10 if total_ids <= 100 else 50
+                    if processed_count % log_interval == 0 or processed_count == total_ids:
+                        elapsed = max(0.1, time.time() - startTime)
+                        rps = processed_count / elapsed
+                        pct = (processed_count / total_ids) * 100
+                        print(f"[Sortir Engine] {pct:5.1f}% ({processed_count:,}/{total_ids:,}) | Speed: {rps:.1f} IDs/s | Aman: {len(final_results['aman']):,}, Banned: {len(final_results['banned']):,}")
+
                 except Exception as inner_e:
                     print(f"[Sortir Engine] ID error: {inner_e}")
 
-        db_finalize_sortir_job(job_id, final_results, total_ids)
+        # Final check before completing
+        if db_check_job_status(job_id) in ("failed", "cancelled"):
+            print(f"[Sortir Engine] Job {job_id} was cancelled. Skipping completion finalization.")
+            return
+
+        db_finalize_sortir_job(job_id, final_results, total_ids, webhook_url)
 
         # Dispatch Webhook if present
-        webhook_url = raw_job_data.get("webhook_url") if isinstance(raw_job_data, dict) else None
         if webhook_url and str(webhook_url).startswith("http"):
             try:
                 webhook_payload = {
                     "event": "sortir.completed",
                     "activity_id": job_id,
                     "total_ids": total_ids,
-                    "results": final_results,
+                    "results": {
+                        "aman": final_results["aman"],
+                        "banned": final_results["banned"]
+                    },
                     "summary": {
                         "total_aman": len(final_results["aman"]),
                         "total_banned": len(final_results["banned"])
@@ -251,13 +431,16 @@ def sortir_worker_task(job_id, ids, raw_job_data=None):
                 print(f"[Sortir Engine] Webhook error: {we}")
 
         duration = round(time.time() - startTime, 2)
-        print(f"[Sortir Engine] Job {job_id} Completed in {duration}s | Aman: {len(final_results['aman'])}, Banned: {len(final_results['banned'])}")
+        err_count = len(final_results.get("error", []))
+        print(f"[Sortir Engine] Job {job_id} Completed in {duration}s | Aman: {len(final_results['aman'])}, Banned: {len(final_results['banned'])}, Error/Blocked: {err_count}")
+        if err_count > 0 and not PROXY_POOL:
+            print(f"[Sortir Engine] ⚠️ {err_count} IDs failed due to WAF/IP Block. Please configure ROTATING_PROXY_URL in web/.env to enable residential proxy.")
 
     except Exception as outer_e:
         print(f"[Sortir Engine] Job {job_id} Failure: {outer_e}")
 
 def sortir_engine_loop():
-    print("[Sortir Engine] Loop started (Master Slots: 10, Inner Concurrency: 20)")
+    print(f"[Sortir Engine] Loop started (Master Slots: {MASTER_WORKER_SLOTS}, Inner Concurrency: {INNER_CONCURRENCY}, Endpoints: {len(ACTIVE_ENDPOINTS)})")
     with ThreadPoolExecutor(max_workers=MASTER_WORKER_SLOTS) as master_pool:
         while True:
             try:
@@ -525,9 +708,9 @@ def extractor_engine_loop():
                     if not file_path or not os.path.exists(file_path):
                         # Coba cari di path fallback uploads/data
                         possible_dirs = [
-                            os.path.join(os.getcwd(), "web", "public", "uploads", "data"),
-                            os.path.join(os.getcwd(), "public", "uploads", "data"),
-                            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "public", "uploads", "data")
+                            os.path.join(os.getcwd(), "web", "private", "uploads", "data"),
+                            os.path.join(os.getcwd(), "private", "uploads", "data"),
+                            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "private", "uploads", "data")
                         ]
                         for pdir in possible_dirs:
                             if os.path.exists(pdir):

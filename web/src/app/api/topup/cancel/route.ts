@@ -20,10 +20,7 @@ export async function POST(req: Request) {
     if (txId) {
       whereClause.id = txId;
     } else if (invoiceId) {
-      whereClause.OR = [
-        { meta_data: { path: ['cashi_order_id'], equals: invoiceId } },
-        { meta_data: { path: ['bayargg_invoice_id'], equals: invoiceId } }
-      ];
+      whereClause.meta_data = { path: ['cashi_order_id'], equals: invoiceId };
     }
 
     const updated = await prisma.transactions.updateMany({

@@ -3,8 +3,9 @@ import { prisma } from "@/utils/prisma";
 import bcrypt from "bcryptjs";
 import { SignJWT } from "jose";
 import { getJwtSecret } from "@/utils/auth";
+import { checkLoginAttemptRateLimit, resetLoginAttemptRateLimit } from "@/utils/rateLimiter";
 
-const MAX_ATTEMPTS = 2;
+const MAX_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 menit
 
 function getClientIdentifier(req: Request) {
@@ -24,6 +25,16 @@ export async function POST(req: Request) {
     }
 
     const { ip, ua } = getClientIdentifier(req);
+
+    // Lapisan 1: rate-limit per-username (immune terhadap rotasi User-Agent & spoofing IP).
+    // Cegah brute-force satu akun lewat ganti UA/IP — tidak bisa dilewati seperti lock DB.
+    const rlCheck = checkLoginAttemptRateLimit(username, ip);
+    if (!rlCheck.allowed) {
+      return NextResponse.json(
+        { error: rlCheck.error },
+        { status: 429 }
+      );
+    }
 
     // Cek apakah sedang dalam status locked
     const attempt = await prisma.login_attempts.findUnique({
@@ -81,10 +92,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Username atau Password Salah" }, { status: 401 });
     }
 
-    // Login sukses → reset attempt
+    // Login sukses → reset attempt DB & rate limiter per-username
     await prisma.login_attempts.deleteMany({
       where: { username, ip_address: ip, user_agent: ua },
     });
+    resetLoginAttemptRateLimit(username);
 
     const token = await new SignJWT({ sub: user.id, username: user.username, role: user.role })
       .setProtectedHeader({ alg: "HS256" })
@@ -99,6 +111,7 @@ export async function POST(req: Request) {
     response.cookies.set("vortx_session", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
       maxAge: 60 * 60 * 24 * 7,
       path: "/",
     });

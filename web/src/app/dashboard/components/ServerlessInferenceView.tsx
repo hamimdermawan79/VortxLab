@@ -25,7 +25,7 @@ export default function ServerlessInferenceView({
   onOpenTopup
 }: ServerlessInferenceViewProps) {
   const [copiedBaseUrl, setCopiedBaseUrl] = useState(false);
-  const [apiKey, setApiKey] = useState<{ id: string; name: string; key: string; createdAt: string } | null>(null);
+  const [apiKey, setApiKey] = useState<{ id: string; name: string; key: string; isLegacy: boolean; createdAt: string } | null>(null);
   const [isLoadingKey, setIsLoadingKey] = useState(false);
   const [showRegenerateModal, setShowRegenerateModal] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
@@ -51,6 +51,7 @@ export default function ServerlessInferenceView({
           id: data.key.id,
           name: data.key.name,
           key: data.key.key,
+          isLegacy: data.key.isLegacy !== false,
           createdAt: new Date(data.key.createdAt).toLocaleDateString("id-ID", {
             day: "numeric",
             month: "short",
@@ -92,6 +93,7 @@ export default function ServerlessInferenceView({
           id: data.key.id,
           name: data.key.name,
           key: data.key.key,
+          isLegacy: false,
           createdAt: "Baru saja",
         });
         setShowRegenerateModal(false);
@@ -312,8 +314,15 @@ export default function ServerlessInferenceView({
                 </span>
               </div>
               <code className="text-xs font-mono text-[#18181b] break-all font-semibold block">
-                {apiKey.key.slice(0, 12)}••••••••••••••••••••{apiKey.key.slice(-6)}
+                {apiKey.isLegacy
+                  ? `${apiKey.key.slice(0, 12)}••••••••••••••••••••${apiKey.key.slice(-6)}`
+                  : apiKey.key}
               </code>
+              {!apiKey.isLegacy && (
+                <p className="text-[10px] text-[#e26d40] font-medium leading-tight">
+                  ⚠️ Key baru hanya ditampilkan sekali. Salin sekarang — setelah halaman dimuat ulang, key tidak dapat dilihat lagi (tersimpan ter-hash di server).
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
