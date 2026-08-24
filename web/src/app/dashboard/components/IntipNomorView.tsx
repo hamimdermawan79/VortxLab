@@ -413,6 +413,23 @@ export default function IntipNomorView({
           </div>
         </div>
       )}
+
+      {/* Warning Card */}
+      <div className="mt-4 flex items-start gap-3 p-3 rounded-xs border border-amber-200 bg-amber-50">
+        <AlertCircle size={16} className="text-amber-600 mt-0.5 shrink-0" />
+        <p className="text-[11px] text-amber-800 leading-relaxed">
+          Jika fitur bermasalah, silahkan hubungi{" "}
+          <a
+            href="https://wa.me/6281919027336"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-amber-700 underline underline-offset-2 hover:text-amber-900"
+          >
+            contact admin
+          </a>{" "}
+          yang tersedia.
+        </p>
+      </div>
     </div>
   );
 }

@@ -630,7 +630,7 @@ export default function Home() {
             </div>
             <div className="space-y-2 pt-2">
               <a
-                href="https://wa.me/6285768434100"
+                href="https://wa.me/6281919027336"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 p-3 rounded-xs border border-[#f7d8c4] hover:bg-[#fff9f5] transition-colors text-xs font-semibold text-[#e26d40]"

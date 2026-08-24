@@ -9,6 +9,7 @@ import AdmZip from 'adm-zip';
 import { getUser } from '@/utils/auth';
 import { prisma } from '@/utils/prisma';
 import { safeErrorResponse } from '@/utils/security';
+import { getUploadsDataDir } from '@/utils/uploads';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
     const contentType = req.headers.get('content-type') || '';
     const timestamp = Date.now().toString();
     // Storage dipindah dari public/ ke private/ — file kredensial user TIDAK boleh dilayani statis.
-    const saveDir = path.join(process.cwd(), 'private', 'uploads', 'data', timestamp);
+    const saveDir = path.join(getUploadsDataDir(), timestamp);
     await mkdir(saveDir, { recursive: true });
 
     let filename = `archive_${timestamp}.zip`;

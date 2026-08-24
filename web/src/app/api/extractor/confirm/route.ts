@@ -5,6 +5,7 @@ import AdmZip from 'adm-zip';
 import { getUser } from '@/utils/auth';
 import { prisma } from '@/utils/prisma';
 import { safeErrorResponse } from '@/utils/security';
+import { getUploadsDir, getUploadsDataDir } from '@/utils/uploads';
 
 export const dynamic = 'force-dynamic';
 
@@ -134,9 +135,10 @@ export async function POST(req: NextRequest) {
     let filePath = rawData.file_path || '';
 
     if (!filePath || !fs.existsSync(filePath)) {
-      // Fallback: check uploads/data directories
+      // Fallback: check uploads/data directories (konsisten via UPLOADS_DIR)
       const possibleDirs = [
-        path.join(process.cwd(), 'private', 'uploads', 'data'),
+        path.join(getUploadsDataDir()),
+        path.join(getUploadsDir(), 'data'),
         path.join(process.cwd(), 'web', 'private', 'uploads', 'data'),
         path.join(process.cwd(), '..', 'web', 'private', 'uploads', 'data')
       ];

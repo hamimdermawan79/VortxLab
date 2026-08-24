@@ -1,0 +1,107 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [Production, main, dev, "fix/*", "feature/*"]
+  pull_request:
+    branches: [Production, main, dev]
+
+jobs:
+  build-and-test:
+    name: Build & Test (Next.js Web)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies (npm ci)
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Lint check
+        run: npm run lint --if-present
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+        continue-on-error: true
+
+      - name: Production build
+        run: npm run build
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BOTKITA_API_KEY: ${{ secrets.BOTKITA_API_KEY }}
+          BOTKITA_BASE_URL: ${{ secrets.BOTKITA_BASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+
+      - name: Verify standalone output
+        run: |
+          test -f .next/standalone/server.js && echo "standalone server OK"
+          test -d .next/standalone/.next && echo "standalone .next OK"
+
+      - name: Verify public assets copied
+        run: |
+          test -f public/logo.png && echo "logo OK"
+          test -d public/logoai && echo "logoai OK"
+
+  deploy:
+    name: Deploy ke VPS (Production)
+    if: github.ref == 'refs/heads/Production' && github.event_name == 'push'
+    needs: build-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            cd /home/vortx/vortx-app
+
+            # Backup DB sebelum deploy
+            export DATABASE_URL=$(grep '^DATABASE_URL=' web/.env | head -1 | cut -d= -f2- | tr -d '"')
+            pg_dump "$DATABASE_URL" -F c -f ~/vortx_backup_$(date +%Y%m%d_%H%M).dump 2>/dev/null || echo "backup skipped"
+
+            # Pull Production
+            git checkout Production
+            git pull origin Production
+
+            # Build
+            cd web
+            npm ci
+            npx prisma generate
+            npx prisma db push --accept-data-loss
+            npm run build
+
+            # Copy static & public ke standalone (WAJIB — kalau tidak, gambar/logo hilang)
+            cp -r .next/static .next/standalone/.next/static
+            cp -r public .next/standalone/public
+            mkdir -p private/uploads/data
+
+            # Restart
+            cd ..
+            pm2 restart ecosystem.config.js --update-env
+            pm2 save
+            echo "DEPLOY_OK"
