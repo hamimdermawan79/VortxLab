@@ -30,6 +30,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Coin adjusted successfully' });
     }
     if (action === 'delete') {
+      // Cegah hapus akun sendiri & akun admin lain (lockout/misuse).
+      if (userId === user.id) {
+        return NextResponse.json({ error: 'CANNOT_DELETE_SELF', message: 'Tidak dapat menghapus akun sendiri.' }, { status: 400 });
+      }
+      const target = await prisma.profiles.findUnique({ where: { id: userId }, select: { role: true } });
+      if (target?.role === 'admin') {
+        return NextResponse.json({ error: 'CANNOT_DELETE_ADMIN', message: 'Tidak dapat menghapus akun admin lain.' }, { status: 400 });
+      }
       await prisma.profiles.delete({ where: { id: userId } });
       return NextResponse.json({ message: 'User deleted successfully' });
     }

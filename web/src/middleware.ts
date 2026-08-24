@@ -12,6 +12,10 @@ export async function middleware(request: NextRequest) {
   response.headers.set('X-XSS-Protection', '1; mode=block');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  // HSTS: paksa HTTPS di production, cegah TLS strip / downgrade. preload opsional saat siap.
+  if (process.env.NODE_ENV === 'production') {
+    response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
+  }
 
   const isDashboard = request.nextUrl.pathname.startsWith('/dashboard');
   const isAdmin = request.nextUrl.pathname.startsWith('/admin');

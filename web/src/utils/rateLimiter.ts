@@ -8,6 +8,9 @@ interface RequestLog {
 const sortirRateLimitMap = new Map<string, RequestLog[]>();
 const intipNomorRateLimitMap = new Map<string, RequestLog[]>();
 const cekInfoAkunRateLimitMap = new Map<string, RequestLog[]>();
+const loginAttemptRateLimitMap = new Map<string, RequestLog[]>();
+const registerRateLimitMap = new Map<string, RequestLog[]>();
+const trackRateLimitMap = new Map<string, RequestLog[]>();
 
 // Periodically clean up stale entries every 5 minutes
 if (typeof setInterval !== "undefined") {
@@ -36,10 +39,128 @@ if (typeof setInterval !== "undefined") {
       if (active.length === 0) cekInfoAkunRateLimitMap.delete(userId);
       else cekInfoAkunRateLimitMap.set(userId, active);
     }
+
+    // Clean Login Attempts (15 menit window)
+    const fifteenMinMs = 15 * 60 * 1000;
+    for (const [key, logs] of loginAttemptRateLimitMap.entries()) {
+      const active = logs.filter((log) => now - log.timestamp < fifteenMinMs);
+      if (active.length === 0) loginAttemptRateLimitMap.delete(key);
+      else loginAttemptRateLimitMap.set(key, active);
+    }
+
+    // Clean Register Attempts (1 jam window, per-IP)
+    const oneHourMsReg = 60 * 60 * 1000;
+    for (const [ip, logs] of registerRateLimitMap.entries()) {
+      const active = logs.filter((log) => now - log.timestamp < oneHourMsReg);
+      if (active.length === 0) registerRateLimitMap.delete(ip);
+      else registerRateLimitMap.set(ip, active);
+    }
+
+    // Clean Track (1 menit window, per-ip-hash)
+    for (const [key, logs] of trackRateLimitMap.entries()) {
+      const active = logs.filter((log) => now - log.timestamp < oneMinMs);
+      if (active.length === 0) trackRateLimitMap.delete(key);
+      else trackRateLimitMap.set(key, active);
+    }
   }, 5 * 60 * 1000);
 }
 
-// 1. Rate Limiter for Sortir Banned (Max 20 IDs per request, Unlimited Throughput)
+// 4. Rate Limiter for Login (per-username & per-IP, immune to UA rotation)
+// MAX_ATTEMPTS dalam 15 menit per username — tidak bisa dilewati dengan ganti User-Agent.
+export function checkLoginAttemptRateLimit(
+  username: string,
+  ip: string
+): { allowed: boolean; retryAfterSeconds: number; error?: string } {
+  const MAX_ATTEMPTS = 5;
+  const WINDOW_MS = 15 * 60 * 1000;
+  const now = Date.now();
+
+  // ponytail: key per-username saja — cegah brute-force satu akun lewat rotasi UA/IP.
+  // Lock DB per-(username,ip,ua) tetap dipertahankan sebagai lapisan kedua.
+  const key = `u:${username.toLowerCase()}`;
+  const userLogs = loginAttemptRateLimitMap.get(key) || [];
+  const recentLogs = userLogs.filter((log) => now - log.timestamp < WINDOW_MS);
+
+  if (recentLogs.length >= MAX_ATTEMPTS) {
+    const oldestLog = recentLogs[0];
+    const retryAfter = oldestLog
+      ? Math.ceil((oldestLog.timestamp + WINDOW_MS - now) / 1000)
+      : 900;
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.max(1, retryAfter),
+      error: `Terlalu banyak percobaan login untuk akun ini. Coba lagi dalam ${Math.ceil(Math.max(1, retryAfter) / 60)} menit.`,
+    };
+  }
+
+  recentLogs.push({ timestamp: now, count: 1 });
+  loginAttemptRateLimitMap.set(key, recentLogs);
+
+  return { allowed: true, retryAfterSeconds: 0 };
+}
+
+// Reset rate limit setelah login sukses
+export function resetLoginAttemptRateLimit(username: string) {
+  loginAttemptRateLimitMap.delete(`u:${username.toLowerCase()}`);
+}
+
+// 6. Rate Limiter for /api/track (per-ip-hash, cegah log-spam/DB flood)
+// ponytail: in-memory per-ip-hash, 30 event/menit. Upgrade Redis saat multi-instance.
+export function checkTrackRateLimit(
+  ipHash: string
+): { allowed: boolean; retryAfterSeconds: number } {
+  const MAX_EVENTS = 30;
+  const WINDOW_MS = 60 * 1000; // 1 menit
+  const now = Date.now();
+
+  const logs = trackRateLimitMap.get(ipHash) || [];
+  const recentLogs = logs.filter((log) => now - log.timestamp < WINDOW_MS);
+
+  if (recentLogs.length >= MAX_EVENTS) {
+    const oldestLog = recentLogs[0];
+    const retryAfter = oldestLog
+      ? Math.ceil((oldestLog.timestamp + WINDOW_MS - now) / 1000)
+      : 60;
+    return { allowed: false, retryAfterSeconds: Math.max(1, retryAfter) };
+  }
+
+  recentLogs.push({ timestamp: now, count: 1 });
+  trackRateLimitMap.set(ipHash, recentLogs);
+
+  return { allowed: true, retryAfterSeconds: 0 };
+}
+
+// 5. Rate Limiter for Register (per-IP, cegah mass-account creation / akun bulk spam)
+// ponytail: in-memory per-IP, 3 registrasi per jam per IP. Upgrade ke Redis saat multi-instance.
+export function checkRegisterRateLimit(
+  ip: string
+): { allowed: boolean; retryAfterSeconds: number; error?: string } {
+  const MAX_REGISTRATIONS = 3;
+  const WINDOW_MS = 60 * 60 * 1000; // 1 jam
+  const now = Date.now();
+
+  const ipLogs = registerRateLimitMap.get(ip) || [];
+  const recentLogs = ipLogs.filter((log) => now - log.timestamp < WINDOW_MS);
+
+  if (recentLogs.length >= MAX_REGISTRATIONS) {
+    const oldestLog = recentLogs[0];
+    const retryAfter = oldestLog
+      ? Math.ceil((oldestLog.timestamp + WINDOW_MS - now) / 1000)
+      : 3600;
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.max(1, retryAfter),
+      error: `Terlalu banyak registrasi dari IP ini. Coba lagi dalam ${Math.ceil(Math.max(1, retryAfter) / 60)} menit.`,
+    };
+  }
+
+  recentLogs.push({ timestamp: now, count: 1 });
+  registerRateLimitMap.set(ip, recentLogs);
+
+  return { allowed: true, retryAfterSeconds: 0 };
+}
+
+// 1. Rate Limiter for Sortir Banned (Max 100,000 IDs per bulk job, Unlimited Throughput)
 export function checkSortirRateLimit(
   userId: string,
   requestedCount: number
@@ -50,7 +171,7 @@ export function checkSortirRateLimit(
   retryAfterSeconds: number;
   error?: string;
 } {
-  const MAX_PER_REQUEST = 20;
+  const MAX_PER_REQUEST = 100000;
 
   if (requestedCount > MAX_PER_REQUEST) {
     return {
@@ -58,7 +179,7 @@ export function checkSortirRateLimit(
       limit: MAX_PER_REQUEST,
       remaining: 0,
       retryAfterSeconds: 0,
-      error: `BATCH_SIZE_EXCEEDED: Maksimal ${MAX_PER_REQUEST} ID per single request API. Silakan pecah payload Anda menjadi batch maksimal 20 ID.`,
+      error: `BATCH_SIZE_EXCEEDED: Maksimal ${MAX_PER_REQUEST.toLocaleString()} ID per single job. Silakan perkecil ukuran batch Anda.`,
     };
   }
 

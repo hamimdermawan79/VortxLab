@@ -25,9 +25,11 @@ import {
   Code2,
   Terminal,
   ShieldCheck,
-  CreditCard,
   Phone,
-  UserCheck
+  UserCheck,
+  Zap,
+  Cpu,
+  CreditCard
 } from "lucide-react";
 import AIModelsCatalog from "./components/AIModelsCatalog";
 import ServerlessInferenceView from "./components/ServerlessInferenceView";
@@ -35,6 +37,7 @@ import AIPlaygroundView from "./components/AIPlaygroundView";
 import NewCheckerView from "./components/NewCheckerView";
 import IntipNomorView from "./components/IntipNomorView";
 import CekInfoAkunView from "./components/CekInfoAkunView";
+import HeadlessDataCheckerView from "./components/HeadlessDataCheckerView";
 import VortXLogo from "@/components/VortXLogo";
 import Footer from "@/components/Footer";
 
@@ -69,6 +72,13 @@ const HIGGS_PRODUCTS = [
     icon: Download,
     cost: 100,
   },
+  {
+    sku: "headless-checker",
+    label: "Headless Data Checker",
+    icon: Cpu,
+    cost: 50,
+    isSoon: true,
+  },
 ];
 
 type Status = "idle" | "deducting" | "processing" | "completed" | "failed" | "uploading";
@@ -78,18 +88,28 @@ function SortirResultGroup({
   amanIds = [],
   bannedIds = [],
   totalIds,
+  totalAmanCount,
+  totalBannedCount,
   onDownloadCsv,
   title = "Hasil Pemrosesan Sortir",
+  isLive = false,
+  rawLinesMap,
 }: {
   amanIds?: string[];
   bannedIds?: string[];
   totalIds?: number;
+  totalAmanCount?: number;
+  totalBannedCount?: number;
   onDownloadCsv?: () => void;
   title?: string;
+  isLive?: boolean;
+  rawLinesMap?: Record<string, string>;
 }) {
   const safeAman = Array.isArray(amanIds) ? amanIds : [];
   const safeBanned = Array.isArray(bannedIds) ? bannedIds : [];
-  const total = totalIds || (safeAman.length + safeBanned.length);
+  const displayAmanCount = typeof totalAmanCount === "number" ? totalAmanCount : safeAman.length;
+  const displayBannedCount = typeof totalBannedCount === "number" ? totalBannedCount : safeBanned.length;
+  const total = totalIds || (displayAmanCount + displayBannedCount);
 
   const [copiedAman, setCopiedAman] = useState(false);
   const [copiedBanned, setCopiedBanned] = useState(false);
@@ -101,7 +121,8 @@ function SortirResultGroup({
   const handleCopyAman = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (safeAman.length === 0) return;
-    navigator.clipboard.writeText(safeAman.join("\n"));
+    const text = safeAman.map((id) => rawLinesMap?.[id] || id).join("\n");
+    navigator.clipboard.writeText(text);
     setCopiedAman(true);
     setTimeout(() => setCopiedAman(false), 2000);
   };
@@ -109,20 +130,25 @@ function SortirResultGroup({
   const handleCopyBanned = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (safeBanned.length === 0) return;
-    navigator.clipboard.writeText(safeBanned.join("\n"));
+    const text = safeBanned.map((id) => rawLinesMap?.[id] || id).join("\n");
+    navigator.clipboard.writeText(text);
     setCopiedBanned(true);
     setTimeout(() => setCopiedBanned(false), 2000);
   };
 
-  const visibleAman = showAllAman ? safeAman : safeAman.slice(0, MAX_SHOW);
-  const visibleBanned = showAllBanned ? safeBanned : safeBanned.slice(0, MAX_SHOW);
+  // For live view, show newest items first
+  const displayListAman = isLive ? [...safeAman].reverse() : safeAman;
+  const displayListBanned = isLive ? [...safeBanned].reverse() : safeBanned;
+
+  const visibleAman = showAllAman ? displayListAman : displayListAman.slice(0, MAX_SHOW);
+  const visibleBanned = showAllBanned ? displayListBanned : displayListBanned.slice(0, MAX_SHOW);
 
   return (
     <div className="space-y-3">
       {title && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-[#e4e4e7]">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className={`w-2 h-2 rounded-full ${isLive ? "bg-emerald-500 animate-pulse" : "bg-black"}`} />
             <h4 className="text-xs font-semibold text-[#18181b] uppercase tracking-wider">
               {title}
             </h4>
@@ -147,12 +173,12 @@ function SortirResultGroup({
           <div>
             <div className="flex items-center justify-between pb-2.5 border-b border-emerald-500/20">
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                <div className={`w-2 h-2 rounded-full bg-emerald-500 ${isLive ? "animate-pulse" : ""}`} />
                 <span className="text-xs font-bold uppercase tracking-wider text-emerald-950">
                   Akun Aman
                 </span>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800 border border-emerald-500/30">
-                  {safeAman.length.toLocaleString()} ID
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800 border border-emerald-500/30 transition-all duration-300">
+                  {displayAmanCount.toLocaleString()} ID
                 </span>
               </div>
               <button
@@ -167,34 +193,39 @@ function SortirResultGroup({
                   </>
                 ) : (
                   <>
-                    <Copy size={12} /> Salin ({safeAman.length})
+                    <Copy size={12} /> Salin ({displayAmanCount})
                   </>
                 )}
               </button>
             </div>
 
             <div className="mt-2.5">
-              {safeAman.length === 0 ? (
+              {displayAmanCount === 0 && safeAman.length === 0 ? (
                 <div className="py-5 text-center text-xs text-emerald-800/60 font-mono italic bg-white/40 rounded-xs border border-emerald-500/10">
-                  Tidak ada akun dalam status Aman
+                  {isLive ? "Menunggu akun aman masuk pool..." : "Tidak ada akun dalam status Aman"}
                 </div>
               ) : (
                 <div className="space-y-1.5">
                   <div className="bg-white/80 border border-emerald-500/20 rounded-xs p-2 max-h-48 overflow-y-auto font-mono text-[11px] text-emerald-950 divide-y divide-emerald-500/10 select-all">
-                    {visibleAman.map((id, idx) => (
-                      <div
-                        key={idx}
-                        className="py-1 px-1.5 flex items-center justify-between hover:bg-emerald-500/10 rounded-xs"
-                      >
-                        <span className="font-semibold">{id}</span>
-                        <span className="text-[9px] text-emerald-700/60 font-sans font-normal">
-                          #{idx + 1}
-                        </span>
-                      </div>
-                    ))}
+                    {visibleAman.map((id, idx) => {
+                      const fullLine = rawLinesMap?.[id] || id;
+                      return (
+                        <div
+                          key={idx}
+                          className="py-1 px-1.5 flex items-center justify-between hover:bg-emerald-500/10 rounded-xs transition-colors gap-2"
+                        >
+                          <span className="font-semibold truncate" title={fullLine}>
+                            {fullLine}
+                          </span>
+                          <span className="text-[9px] text-emerald-700/60 font-sans font-normal shrink-0">
+                            {isLive ? "Baru" : `#${idx + 1}`}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
 
-                  {safeAman.length > MAX_SHOW && (
+                  {displayListAman.length > MAX_SHOW && (
                     <button
                       type="button"
                       onClick={() => setShowAllAman(!showAllAman)}
@@ -202,7 +233,7 @@ function SortirResultGroup({
                     >
                       {showAllAman
                         ? "Sembunyikan sebagian"
-                        : `Tampilkan semua (${safeAman.length.toLocaleString()} ID)`}
+                        : `Tampilkan semua (${displayListAman.length.toLocaleString()} ID)`}
                     </button>
                   )}
                 </div>
@@ -213,7 +244,7 @@ function SortirResultGroup({
           <div className="pt-2 border-t border-emerald-500/15 flex items-center justify-between text-[10px] text-emerald-800 font-mono">
             <span>Rasio Akun Aman:</span>
             <span className="font-semibold text-emerald-950">
-              {total > 0 ? ((safeAman.length / total) * 100).toFixed(1) : 0}%
+              {total > 0 ? ((displayAmanCount / total) * 100).toFixed(1) : 0}%
             </span>
           </div>
         </div>
@@ -223,12 +254,12 @@ function SortirResultGroup({
           <div>
             <div className="flex items-center justify-between pb-2.5 border-b border-red-500/20">
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-red-500" />
+                <div className={`w-2 h-2 rounded-full bg-red-500 ${isLive ? "animate-pulse" : ""}`} />
                 <span className="text-xs font-bold uppercase tracking-wider text-red-950">
                   Akun Banned
                 </span>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-red-500/15 text-red-800 border border-red-500/30">
-                  {safeBanned.length.toLocaleString()} ID
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-red-500/15 text-red-800 border border-red-500/30 transition-all duration-300">
+                  {displayBannedCount.toLocaleString()} ID
                 </span>
               </div>
               <button
@@ -243,34 +274,39 @@ function SortirResultGroup({
                   </>
                 ) : (
                   <>
-                    <Copy size={12} /> Salin ({safeBanned.length})
+                    <Copy size={12} /> Salin ({displayBannedCount})
                   </>
                 )}
               </button>
             </div>
 
             <div className="mt-2.5">
-              {safeBanned.length === 0 ? (
+              {displayBannedCount === 0 && safeBanned.length === 0 ? (
                 <div className="py-5 text-center text-xs text-red-800/60 font-mono italic bg-white/40 rounded-xs border border-red-500/10">
-                  Tidak ada akun dalam status Banned
+                  {isLive ? "Menunggu akun banned terdeteksi..." : "Tidak ada akun dalam status Banned"}
                 </div>
               ) : (
                 <div className="space-y-1.5">
                   <div className="bg-white/80 border border-red-500/20 rounded-xs p-2 max-h-48 overflow-y-auto font-mono text-[11px] text-red-950 divide-y divide-red-500/10 select-all">
-                    {visibleBanned.map((id, idx) => (
-                      <div
-                        key={idx}
-                        className="py-1 px-1.5 flex items-center justify-between hover:bg-red-500/10 rounded-xs"
-                      >
-                        <span className="font-semibold">{id}</span>
-                        <span className="text-[9px] text-red-700/60 font-sans font-normal">
-                          #{idx + 1}
-                        </span>
-                      </div>
-                    ))}
+                    {visibleBanned.map((id, idx) => {
+                      const fullLine = rawLinesMap?.[id] || id;
+                      return (
+                        <div
+                          key={idx}
+                          className="py-1 px-1.5 flex items-center justify-between hover:bg-red-500/10 rounded-xs transition-colors gap-2"
+                        >
+                          <span className="font-semibold truncate" title={fullLine}>
+                            {fullLine}
+                          </span>
+                          <span className="text-[9px] text-red-700/60 font-sans font-normal shrink-0">
+                            {isLive ? "Baru" : `#${idx + 1}`}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
 
-                  {safeBanned.length > MAX_SHOW && (
+                  {displayListBanned.length > MAX_SHOW && (
                     <button
                       type="button"
                       onClick={() => setShowAllBanned(!showAllBanned)}
@@ -278,7 +314,7 @@ function SortirResultGroup({
                     >
                       {showAllBanned
                         ? "Sembunyikan sebagian"
-                        : `Tampilkan semua (${safeBanned.length.toLocaleString()} ID)`}
+                        : `Tampilkan semua (${displayListBanned.length.toLocaleString()} ID)`}
                     </button>
                   )}
                 </div>
@@ -289,13 +325,81 @@ function SortirResultGroup({
           <div className="pt-2 border-t border-red-500/15 flex items-center justify-between text-[10px] text-red-800 font-mono">
             <span>Rasio Akun Banned:</span>
             <span className="font-semibold text-red-950">
-              {total > 0 ? ((safeBanned.length / total) * 100).toFixed(1) : 0}%
+              {total > 0 ? ((displayBannedCount / total) * 100).toFixed(1) : 0}%
             </span>
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+function parseSortirEntries(rawText: string): { ids: string[]; rawMap: Record<string, string> } {
+  if (!rawText || typeof rawText !== "string") return { ids: [], rawMap: {} };
+  const lines = rawText.split(/\r?\n/);
+  const extractedIds: string[] = [];
+  const rawMap: Record<string, string> = {};
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    let id: string | null = null;
+
+    // 1. Match explicit "ID: <number>" pattern
+    const m1 = trimmed.match(/\b(?:id|user_?id|uid)\s*[:=]\s*(\d{4,12})\b/i);
+    if (m1 && m1[1]) {
+      id = m1[1];
+    }
+
+    // 2. Match start with "ID <number>"
+    if (!id) {
+      const m2 = trimmed.match(/^id\s*[:=]?\s*(\d{4,12})/i);
+      if (m2 && m2[1]) {
+        id = m2[1];
+      }
+    }
+
+    // 3. Delimited formats (pipe, tab, comma, colon, space) e.g. "35906623|PW|MAC" or "35906623,PW"
+    if (!id) {
+      const tokens = trimmed.split(/[\t,|;:]+/).map((t) => t.trim()).filter(Boolean);
+      for (const token of tokens) {
+        if (/^\d{5,12}$/.test(token)) {
+          id = token;
+          break;
+        }
+      }
+    }
+
+    // 4. Generic match for 5-12 digits sequence in the line
+    if (!id) {
+      const m3 = trimmed.match(/\b\d{5,12}\b/);
+      if (m3) {
+        id = m3[0];
+      }
+    }
+
+    // 5. Pure numbers fallback
+    if (!id) {
+      const numOnly = trimmed.replace(/\D/g, "");
+      if (numOnly.length >= 5 && numOnly.length <= 12) {
+        id = numOnly;
+      }
+    }
+
+    if (id) {
+      extractedIds.push(id);
+      if (!rawMap[id]) {
+        rawMap[id] = trimmed;
+      }
+    }
+  }
+
+  return { ids: extractedIds, rawMap };
+}
+
+function parseSortirIds(rawText: string): string[] {
+  return parseSortirEntries(rawText).ids;
 }
 
 // =================== SortirBanned View ===================
@@ -317,16 +421,102 @@ function SortirBannedView({
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [latestFinishedResult, setLatestFinishedResult] = useState<any | null>(null);
+  const [isLatestCollapsed, setIsLatestCollapsed] = useState(true);
+  const [persistedRawMap, setPersistedRawMap] = useState<Record<string, string>>({});
   const pollingTimeouts = useRef<Record<string, any>>({});
+  const eventSources = useRef<Record<string, EventSource>>({});
 
-  const idList = useMemo(
-    () => rawInput.split(/[\n,]/).map((s) => s.trim()).filter(Boolean),
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("vortx_raw_lines_map");
+      if (saved) setPersistedRawMap(JSON.parse(saved));
+    } catch {}
+  }, []);
+
+  const { ids: idList, rawMap: currentRawMap } = useMemo(
+    () => parseSortirEntries(rawInput),
     [rawInput]
   );
   const uniqueIds = useMemo(() => Array.from(new Set(idList)), [idList]);
   const dupCount = idList.length - uniqueIds.length;
   const totalCost = uniqueIds.length * costPerUse;
   const insufficient = userBalance < totalCost;
+
+  const allRawLinesMap = useMemo(
+    () => ({ ...persistedRawMap, ...currentRawMap }),
+    [persistedRawMap, currentRawMap]
+  );
+
+  const connectToSseStream = (activityId: string) => {
+    if (eventSources.current[activityId]) return;
+
+    try {
+      const es = new EventSource(`/api/sortir-banned/stream?activityId=${activityId}`);
+      eventSources.current[activityId] = es;
+
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const amanList = data.aman_ids || data.raw_results?.aman || [];
+          const bannedList = data.banned_ids || data.raw_results?.banned || [];
+          const amanCount = typeof data.aman_count === "number" ? data.aman_count : amanList.length;
+          const bannedCount = typeof data.banned_count === "number" ? data.banned_count : bannedList.length;
+
+          setHistoryJobs((prev) =>
+            prev.map((job) => {
+              if (job.id === activityId) {
+                return {
+                  ...job,
+                  status: data.status,
+                  current_index: data.current_index,
+                  total_ids: data.total_ids,
+                  summary: {
+                    total_aman: amanCount,
+                    total_banned: bannedCount,
+                  },
+                  recent_stream: data.recent_stream || [],
+                  raw_results: {
+                    aman: amanList,
+                    banned: bannedList,
+                  },
+                  aman_ids: amanList,
+                  banned_ids: bannedList,
+                };
+              }
+              return job;
+            })
+          );
+
+          if (data.is_completed) {
+            es.close();
+            delete eventSources.current[activityId];
+            onSuccess(true);
+            loadHistory();
+            if (data.raw_results || amanList.length > 0 || bannedList.length > 0) {
+              setLatestFinishedResult({
+                id: activityId,
+                aman: amanList,
+                banned: bannedList,
+                total_ids: data.total_ids,
+              });
+              setExpandedJobId(activityId);
+            }
+          }
+        } catch (err) {
+          console.error("SSE parse error:", err);
+        }
+      };
+
+      es.onerror = () => {
+        es.close();
+        delete eventSources.current[activityId];
+        // Fallback to polling if SSE disconnected
+        pollHistoryJob(activityId);
+      };
+    } catch (e) {
+      pollHistoryJob(activityId);
+    }
+  };
 
   const loadHistory = async () => {
     setIsLoadingHistory(true);
@@ -337,7 +527,7 @@ function SortirBannedView({
         setHistoryJobs(data.jobs);
         data.jobs.forEach((job: any) => {
           if (job.status === "pending" || job.status === "processing") {
-            pollHistoryJob(job.id);
+            connectToSseStream(job.id);
           }
         });
       }
@@ -351,6 +541,7 @@ function SortirBannedView({
     loadHistory();
     return () => {
       Object.values(pollingTimeouts.current).forEach(clearTimeout);
+      Object.values(eventSources.current).forEach((es) => es.close());
     };
   }, []);
 
@@ -361,6 +552,11 @@ function SortirBannedView({
         { cache: "no-store" }
       );
       const data = await res.json();
+      const amanList = data.aman_ids || data.raw_results?.aman || [];
+      const bannedList = data.banned_ids || data.raw_results?.banned || [];
+      const amanCount = data.summary?.total_aman ?? (typeof data.aman_count === "number" ? data.aman_count : amanList.length);
+      const bannedCount = data.summary?.total_banned ?? (typeof data.banned_count === "number" ? data.banned_count : bannedList.length);
+
       setHistoryJobs((prev) =>
         prev.map((job) => {
           if (job.id === activityId) {
@@ -369,7 +565,17 @@ function SortirBannedView({
               status: data.status,
               current_index: data.current_index,
               total_ids: data.total_ids,
-              raw_results: data.raw_results,
+              summary: {
+                total_aman: amanCount,
+                total_banned: bannedCount,
+              },
+              recent_stream: data.recent_stream || [],
+              raw_results: {
+                aman: amanList,
+                banned: bannedList,
+              },
+              aman_ids: amanList,
+              banned_ids: bannedList,
             };
           }
           return job;
@@ -378,7 +584,7 @@ function SortirBannedView({
       if (data.status === "pending" || data.status === "processing") {
         pollingTimeouts.current[activityId] = setTimeout(
           () => pollHistoryJob(activityId),
-          5000
+          2000
         );
       } else {
         if (data.status === "completed") {
@@ -397,7 +603,7 @@ function SortirBannedView({
     } catch (e) {
       pollingTimeouts.current[activityId] = setTimeout(
         () => pollHistoryJob(activityId),
-        5000
+        3000
       );
     }
   };
@@ -407,21 +613,30 @@ function SortirBannedView({
     setShowConfirm(false);
     setError(null);
     setStatus("deducting");
+
+    // Persist raw lines mapping for full-format copy
+    const mergedMap = { ...persistedRawMap, ...currentRawMap };
+    setPersistedRawMap(mergedMap);
     try {
-      const BATCH_SIZE = 20;
-      for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
-        const chunk = uniqueIds.slice(i, i + BATCH_SIZE);
-        const res = await fetch("/api/sortir-banned", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: chunk }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || data.error || "Gagal memproses sortir");
-      }
+      localStorage.setItem("vortx_raw_lines_map", JSON.stringify(mergedMap));
+    } catch {}
+
+    try {
+      // 1-Job Bulk Submission (1 Single POST Payload)
+      const res = await fetch("/api/sortir-banned", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: uniqueIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || "Gagal memproses sortir");
+
       setRawInput("");
       setStatus("idle");
       loadHistory();
+      if (data.activity_id) {
+        connectToSseStream(data.activity_id);
+      }
       onSuccess(true);
     } catch (e: any) {
       setError(e.message);
@@ -454,8 +669,13 @@ function SortirBannedView({
         const results = data.raw_results;
         const maxLen = Math.max(results.aman?.length || 0, results.banned?.length || 0);
         let csv = "Aman,Banned\n";
-        for (let i = 0; i < maxLen; i++)
-          csv += (results.aman?.[i] || "") + "," + (results.banned?.[i] || "") + "\n";
+        for (let i = 0; i < maxLen; i++) {
+          const aId = results.aman?.[i] || "";
+          const bId = results.banned?.[i] || "";
+          const aFull = allRawLinesMap[aId] ? `"${allRawLinesMap[aId].replace(/"/g, '""')}"` : aId;
+          const bFull = allRawLinesMap[bId] ? `"${allRawLinesMap[bId].replace(/"/g, '""')}"` : bId;
+          csv += `${aFull},${bFull}\n`;
+        }
         const blob = new Blob([csv], { type: "text/csv" });
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
@@ -486,9 +706,13 @@ function SortirBannedView({
   };
 
   const handleCancelJob = async (activityId: string) => {
-    if (!confirm("Apakah Anda yakin ingin membatalkan proses sortir ini? Saldo token akan dikembalikan."))
+    if (!confirm("Apakah Anda yakin ingin membatalkan proses sortir ini? Sesuai ketentuan, saldo token yang telah dipotong tidak akan dikembalikan."))
       return;
     try {
+      if (eventSources.current[activityId]) {
+        eventSources.current[activityId].close();
+        delete eventSources.current[activityId];
+      }
       const res = await fetch(`/api/sortir-banned?activityId=${activityId}`, {
         method: "DELETE",
       });
@@ -519,50 +743,68 @@ function SortirBannedView({
   return (
     <div className="space-y-6">
       {activeJob || status === "deducting" ? (
-        <div className="bg-white border border-[#e4e4e7] rounded-xs p-8 flex flex-col items-center justify-center text-center gap-5 shadow-xs">
-          <Loader2 className="animate-spin text-black" size={28} />
+        <div className="space-y-5">
+          <div className="bg-white border border-[#e4e4e7] rounded-xs p-8 flex flex-col items-center justify-center text-center gap-5 shadow-xs">
+            <Loader2 className="animate-spin text-black" size={28} />
 
-          <div className="space-y-1">
-            <h3 className="text-sm font-semibold text-[#18181b]">
-              Sedang Memproses{" "}
-              {activeJob ? activeJob.total_ids.toLocaleString() : uniqueIds.length.toLocaleString()}{" "}
-              ID Target...
-            </h3>
-            <p className="text-xs text-[#71717a]">
-              Mesin sortir otomatis sedang memverifikasi status akun di server
-            </p>
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-[#18181b]">
+                Sedang Memproses{" "}
+                {activeJob ? activeJob.total_ids.toLocaleString() : uniqueIds.length.toLocaleString()}{" "}
+                ID Target...
+              </h3>
+              <p className="text-xs text-[#71717a]">
+                Mesin sortir otomatis sedang memverifikasi status akun di server
+              </p>
+            </div>
+
+            {activeJob && (
+              <div className="w-full max-w-sm mt-2 space-y-3">
+                <div className="flex justify-between text-xs text-[#71717a] font-mono">
+                  <span>Progres</span>
+                  <span className="font-semibold text-black">
+                    {activeJob.total_ids > 0
+                      ? Math.round((activeJob.current_index / activeJob.total_ids) * 100)
+                      : 0}
+                    %
+                  </span>
+                </div>
+                <div className="h-1.5 w-full bg-[#f4f4f5] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-black rounded-full transition-all duration-500"
+                    style={{
+                      width: `${Math.max(
+                        1,
+                        activeJob.total_ids > 0
+                          ? (activeJob.current_index / activeJob.total_ids) * 100
+                          : 0
+                      )}%`,
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={() => handleCancelJob(activeJob.id)}
+                  className="text-xs text-red-600 hover:underline font-medium pt-1 cursor-pointer"
+                >
+                  Batalkan Proses
+                </button>
+              </div>
+            )}
           </div>
 
+          {/* LIVE POOL CARDS (AKUN AMAN & BANNED) */}
           {activeJob && (
-            <div className="w-full max-w-sm mt-2 space-y-3">
-              <div className="flex justify-between text-xs text-[#71717a] font-mono">
-                <span>Progres</span>
-                <span className="font-semibold text-black">
-                  {activeJob.total_ids > 0
-                    ? Math.round((activeJob.current_index / activeJob.total_ids) * 100)
-                    : 0}
-                  %
-                </span>
-              </div>
-              <div className="h-1.5 w-full bg-[#f4f4f5] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-black rounded-full transition-all duration-500"
-                  style={{
-                    width: `${Math.max(
-                      1,
-                      activeJob.total_ids > 0
-                        ? (activeJob.current_index / activeJob.total_ids) * 100
-                        : 0
-                    )}%`,
-                  }}
-                />
-              </div>
-              <button
-                onClick={() => handleCancelJob(activeJob.id)}
-                className="text-xs text-red-600 hover:underline font-medium pt-1 cursor-pointer"
-              >
-                Batalkan Proses & Refund Saldo
-              </button>
+            <div className="bg-white border border-[#e4e4e7] rounded-xs p-5 shadow-xs">
+              <SortirResultGroup
+                title="Live Monitoring Pool Card"
+                amanIds={(activeJob.raw_results as any)?.aman || activeJob.aman_ids || []}
+                bannedIds={(activeJob.raw_results as any)?.banned || activeJob.banned_ids || []}
+                totalAmanCount={activeJob.summary?.total_aman ?? (activeJob.raw_results as any)?.aman_count}
+                totalBannedCount={activeJob.summary?.total_banned ?? (activeJob.raw_results as any)?.banned_count}
+                totalIds={activeJob.total_ids}
+                isLive={true}
+                rawLinesMap={allRawLinesMap}
+              />
             </div>
           )}
         </div>
@@ -603,10 +845,24 @@ function SortirBannedView({
               <textarea
                 value={rawInput}
                 onChange={(e) => setRawInput(e.target.value)}
-                rows={6}
-                placeholder="Paste ID target disini, satu per baris atau dipisahkan koma (atau drag & drop file .txt / .csv disini)..."
-                className="w-full bg-white border border-[#e4e4e7] rounded-xs px-4 py-3 text-xs font-mono text-[#18181b] outline-none focus:border-black resize-none placeholder:text-[#a1a1aa] transition-all font-normal"
+                rows={9}
+                placeholder={`Paste ID atau format akun target disini (atau upload file .txt / .csv)...
+
+Format yang didukung:
+• 35906623 (Hanya ID)
+• ID: 35906623 PW: AF17E2EE... MAC: B2:B5:C3... (Format Akun Lengkap)
+• 35906623|PASSWORD|MAC atau 35906623,PASSWORD
+• Dipisahkan baris baru, koma, spasi, atau titik dua`}
+                className="w-full min-h-[175px] bg-white border border-[#e4e4e7] rounded-xs px-4 py-3 text-xs font-mono text-[#18181b] outline-none focus:border-black resize-y placeholder:text-[#a1a1aa] transition-all font-normal leading-relaxed"
               />
+            </div>
+
+            {/* Security & Privacy Claim */}
+            <div className="flex items-start sm:items-center gap-2.5 px-3.5 py-2.5 bg-emerald-500/[0.04] border border-emerald-500/20 rounded-xs text-[11px] text-[#27272a] leading-relaxed">
+              <ShieldCheck size={16} className="text-emerald-600 shrink-0 mt-0.5 sm:mt-0" />
+              <span>
+                <strong className="font-semibold text-emerald-800">Keamanan 100% Terjaga:</strong> Proses sortir banned VortX Labs hanya memerlukan dan memeriksa <strong>ID</strong> saja. Password, MAC Address, atau data akun lainnya tidak pernah disimpan ataupun dikirim ke server.
+              </span>
             </div>
 
             {/* Spec Box Matrix Style */}
@@ -715,16 +971,48 @@ function SortirBannedView({
         </div>
       )}
 
-      {/* RECENT BATCH RESULT SECTION (IF AVAILABLE) */}
+      {/* RECENT BATCH RESULT SECTION (AUTO-COLLAPSED WHEN LIVE MONITORING IS ACTIVE) */}
       {displayLatestResult && (
-        <div className="bg-white border border-[#e4e4e7] rounded-xs p-5 shadow-xs">
-          <SortirResultGroup
-            title="Hasil Pemrosesan Terakhir"
-            amanIds={displayLatestResult.aman}
-            bannedIds={displayLatestResult.banned}
-            totalIds={displayLatestResult.total_ids}
-            onDownloadCsv={() => downloadHistoryCSV(displayLatestResult.id)}
-          />
+        <div className="bg-white border border-[#e4e4e7] rounded-xs p-4 sm:p-5 shadow-xs space-y-3">
+          {activeJob ? (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#71717a]" />
+                <h4 className="text-xs font-semibold text-[#18181b] uppercase tracking-wider">
+                  Hasil Batch Sebelumnya
+                </h4>
+                <span className="text-[10px] font-mono text-[#71717a]">
+                  ({displayLatestResult.total_ids.toLocaleString()} Total ID • {displayLatestResult.aman.length.toLocaleString()} Aman, {displayLatestResult.banned.length.toLocaleString()} Banned)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsLatestCollapsed(!isLatestCollapsed)}
+                className="self-start sm:self-auto text-[11px] flex items-center gap-1.5 px-2.5 py-1 bg-[#fafafa] hover:bg-[#f4f4f5] border border-[#e4e4e7] rounded-xs text-[#18181b] font-medium transition-colors cursor-pointer shadow-2xs"
+              >
+                {isLatestCollapsed ? (
+                  <>
+                    <ChevronDown size={13} /> Buka Detail Sebelumnya
+                  </>
+                ) : (
+                  <>
+                    <ChevronUp size={13} /> Perkecil
+                  </>
+                )}
+              </button>
+            </div>
+          ) : null}
+
+          {(!activeJob || !isLatestCollapsed) && (
+            <SortirResultGroup
+              title={activeJob ? undefined : "Hasil Pemrosesan Terakhir"}
+              amanIds={displayLatestResult.aman}
+              bannedIds={displayLatestResult.banned}
+              totalIds={displayLatestResult.total_ids}
+              onDownloadCsv={() => downloadHistoryCSV(displayLatestResult.id)}
+              rawLinesMap={allRawLinesMap}
+            />
+          )}
         </div>
       )}
 
@@ -855,6 +1143,7 @@ function SortirBannedView({
                         totalIds={job.total_ids}
                         title={`Rincian Hasil #${job.id.slice(0, 8)}`}
                         onDownloadCsv={() => downloadHistoryCSV(job.id)}
+                        rawLinesMap={allRawLinesMap}
                       />
                     </div>
                   )}
@@ -1480,6 +1769,88 @@ function DataExtractorView({
           Download Tools (Soon)
         </button>
       </div>
+
+      {/* STANDALONE BACKGROUND PREVIEW (PURE TYPOGRAPHY & NOTEPAD WINDOWS) */}
+      <div className="pt-3 space-y-3">
+        {/* Pure Typography Claim */}
+        <div className="space-y-0.5">
+          <h4 className="text-xs font-semibold text-[#18181b] uppercase tracking-wider">
+            Engine Parsing Data VortXLabs
+          </h4>
+          <p className="text-xs text-[#71717a] leading-relaxed">
+            Sudah digunakan lebih dari <strong className="text-[#e26d40] font-semibold">1.000+ User</strong>, dengan logika akurat yang memungkinkan pengecekan data lebih akurat dan lebih mendalam.
+          </p>
+        </div>
+
+        {/* DUA JENDELA MACOS NOTEPAD TERPISAH (BERSIH LANGSUNG KE BACKGROUND) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* JENDELA 1: BEFORE (local_data.conf) */}
+          <div className="rounded-lg border border-[#30363d] bg-[#0d1117] text-white shadow-xl overflow-hidden font-mono text-xs flex flex-col">
+            <div className="px-4 py-2.5 bg-[#161b22] border-b border-[#30363d] flex items-center justify-between select-none">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-full bg-[#ff5f56] border border-[#e0443e] inline-block shadow-sm" />
+                  <span className="w-3 h-3 rounded-full bg-[#ffbd2e] border border-[#dea123] inline-block shadow-sm" />
+                  <span className="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29] inline-block shadow-sm" />
+                </div>
+                <span className="text-xs text-[#8b949e] font-sans font-medium ml-2">
+                  local_data.conf
+                </span>
+              </div>
+              <span className="text-[10px] text-[#6e7681] font-sans bg-[#21262d] px-2 py-0.5 rounded border border-[#30363d]">
+                Format Sebelum
+              </span>
+            </div>
+
+            <div className="p-4 overflow-x-auto max-h-60 overflow-y-auto">
+              <pre className="text-[11px] text-[#8b949e] leading-relaxed select-all font-mono">
+{`[LOCAL_DATA_INFO]
+key_send_bankruptcy_124389436 = 1
+last_login_userid = 12345678
+last_login_type = 3
+hw_account_id_0 = 12345678
+hw_account_password_0 = AF1234ABC56DEF78901234567890ABCDEF123456
+hw_account_type_0 = 1
+hw_account_id_1 = 87654321
+hw_account_password_1 = AF1234ABC56DEF78901234567890ABCDEF123456
+hw_account_type_1 = 1
+hw_account_id_2 = 19283746
+hw_account_password_2 = AF1234ABC56DEF78901234567890ABCDEF123456
+hw_account_type_2 = 1
+key_free_get_rose_online_time = 390
+key_into_free_room_124389436 = 0`}
+              </pre>
+            </div>
+          </div>
+
+          {/* JENDELA 2: AFTER (vortx_extracted.txt) */}
+          <div className="rounded-lg border border-[#e26d40]/40 bg-[#0d1117] text-white shadow-xl overflow-hidden font-mono text-xs flex flex-col">
+            <div className="px-4 py-2.5 bg-[#161b22] border-b border-[#30363d] flex items-center justify-between select-none">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-full bg-[#ff5f56] border border-[#e0443e] inline-block shadow-sm" />
+                  <span className="w-3 h-3 rounded-full bg-[#ffbd2e] border border-[#dea123] inline-block shadow-sm" />
+                  <span className="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29] inline-block shadow-sm" />
+                </div>
+                <span className="text-xs text-[#c9d1d9] font-sans font-semibold ml-2 flex items-center gap-1.5">
+                  vortx_extracted.txt
+                </span>
+              </div>
+              <span className="text-[10px] text-[#e26d40] bg-[#e26d40]/15 px-2 py-0.5 rounded border border-[#e26d40]/30 font-sans font-medium">
+                Hasil Ekstraksi
+              </span>
+            </div>
+
+            <div className="p-4 overflow-x-auto max-h-60 overflow-y-auto">
+              <pre className="text-[11px] text-[#e6edf3] leading-relaxed selection:bg-[#e26d40] selection:text-white select-all font-mono">
+{`ID: 12345678 PW: AF1234ABC56DEF78901234567890ABCDEF123456 MAC: 72:DD:A8:5D:48:4C
+ID: 87654321 PW: AF1234ABC56DEF78901234567890ABCDEF123456 MAC: 72:DD:A8:5D:48:4C
+ID: 19283746 PW: AF1234ABC56DEF78901234567890ABCDEF123456 MAC: 72:DD:A8:5D:48:4C`}
+              </pre>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2003,6 +2374,15 @@ export default function DashboardPage() {
                   >
                     <Icon size={14} />
                     <span>{tool.label}</span>
+                    {(tool as any).isSoon && (
+                      <span className={`ml-1 px-1.5 py-0.5 text-[9px] font-mono font-bold rounded ${
+                        isActive
+                          ? "bg-white/20 text-white"
+                          : "bg-[#e26d40]/15 text-[#e26d40] border border-[#e26d40]/30"
+                      }`}>
+                        Soon
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -2010,7 +2390,7 @@ export default function DashboardPage() {
 
             {/* Main Tool Container */}
             <div className="bg-white border border-[#e4e4e7] rounded-xs p-5 sm:p-6 shadow-xs space-y-6">
-              {activeHiggsTool.sku !== "new-checker" && (
+              {activeHiggsTool.sku !== "new-checker" && activeHiggsTool.sku !== "headless-checker" && (
                 <div className="flex items-center justify-between pb-4 border-b border-[#e4e4e7]">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-xs bg-[#f4f4f5] border border-[#e4e4e7] text-black">
@@ -2076,6 +2456,8 @@ export default function DashboardPage() {
               )}
 
               {activeHiggsTool.sku === "new-checker" && <NewCheckerView onBalanceChange={fetchProfile} />}
+
+              {activeHiggsTool.sku === "headless-checker" && <HeadlessDataCheckerView />}
             </div>
           </div>
         )}

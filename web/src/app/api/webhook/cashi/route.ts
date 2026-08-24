@@ -17,14 +17,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
     }
 
-    if (signature) {
-      const computedSignature = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-      if (computedSignature.toLowerCase() !== signature.toLowerCase()) {
-        console.error('[Cashi Webhook Error]: Invalid signature verification attempt');
-        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-      }
-    } else {
-      console.warn('[Cashi Webhook Warning]: Received webhook without signature header');
+    // Signature WAJIB. Tanpa signature, webhook ditolak total (cegah kredit saldo palsu).
+    if (!signature) {
+      console.error('[Cashi Webhook Error]: Missing signature header');
+      return NextResponse.json({ error: 'Missing signature' }, { status: 401 });
+    }
+    const computedSignature = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+    // ponytail: timingSafeEqual butuh panjang sama, cek dulu agar tidak throw
+    const sigBuf = Buffer.from(signature.toLowerCase());
+    const expBuf = Buffer.from(computedSignature.toLowerCase());
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      console.error('[Cashi Webhook Error]: Invalid signature verification attempt');
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
     let payload: any;
@@ -51,10 +55,7 @@ export async function POST(req: Request) {
         const transaction = await tx.transactions.findFirst({
           where: {
             status: 'pending',
-            OR: [
-              { meta_data: { path: ['cashi_order_id'], equals: orderId } },
-              { meta_data: { path: ['bayargg_invoice_id'], equals: orderId } }
-            ]
+            meta_data: { path: ['cashi_order_id'], equals: orderId }
           }
         });
 

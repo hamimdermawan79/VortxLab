@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { safeErrorResponse } from '@/utils/security';
+import { getUploadsDir } from '@/utils/uploads';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
+import { getUser } from '@/utils/auth';
 
 export async function POST(req: NextRequest) {
   try {
+    const user = await getUser();
+    if (!user) return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
+
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 });
@@ -26,9 +31,10 @@ export async function POST(req: NextRequest) {
     });
     const dupCount = rawEntries.length - deduped.length;
 
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+    // Storage private — file kredensial tidak dilayani statis.
+    const uploadDir = getUploadsDir();
     await mkdir(uploadDir, { recursive: true });
-    const fileName = Date.now() + '_' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const fileName = Date.now() + '_' + (file.name || 'upload').replace(/[^a-zA-Z0-9._-]/g, '_');
     const filePath = path.join(uploadDir, fileName);
     await writeFile(filePath, deduped.map(e => `ID: ${e.id} PW: ${e.pw} MAC: ${e.mac}`).join('\n'), 'utf-8');
 
@@ -38,7 +44,7 @@ export async function POST(req: NextRequest) {
       validAfter: deduped.length,
       dupCount,
       entries: deduped,
-      savedPath: `/uploads/${fileName}`,
+      savedPath: fileName,
       originalName: file.name,
       invalidLines: lines.length - validLines.length,
     });

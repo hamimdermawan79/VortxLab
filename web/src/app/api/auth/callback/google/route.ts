@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/utils/prisma";
+import { Prisma } from "@prisma/client";
 import { SignJWT } from "jose";
 import { getJwtSecret } from "@/utils/auth";
 
@@ -113,9 +114,6 @@ export async function GET(req: Request) {
       }
     } else {
       // User does not exist -> create new user
-      const userCount = await prisma.profiles.count();
-      const role = userCount === 0 ? "admin" : "user";
-
       // Generate a unique, clean username
       const rawBase = (googleUser.name || googleUser.email.split("@")[0])
         .toLowerCase()
@@ -129,16 +127,24 @@ export async function GET(req: Request) {
         usernameCandidate = `${usernameCandidate.slice(0, 15)}_${randomSuffix}`;
       }
 
-      user = await prisma.profiles.create({
-        data: {
-          username: usernameCandidate,
-          email: googleUser.email,
-          google_id: googleUser.id,
-          avatar_url: googleUser.picture || null,
-          role,
-          vcoin_balance: 0,
+      // ponytail: race-first-admin dicegah via $transaction Serializable — count+create atomik.
+      user = await prisma.$transaction(
+        async (tx) => {
+          const userCount = await tx.profiles.count();
+          const role = userCount === 0 ? "admin" : "user";
+          return tx.profiles.create({
+            data: {
+              username: usernameCandidate,
+              email: googleUser.email,
+              google_id: googleUser.id,
+              avatar_url: googleUser.picture || null,
+              role,
+              vcoin_balance: 0,
+            },
+          });
         },
-      });
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+      );
     }
 
     // 4. Create VortX session JWT

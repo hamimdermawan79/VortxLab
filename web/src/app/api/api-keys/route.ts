@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUser } from "@/utils/auth";
+import { getUser, hashApiKey } from "@/utils/auth";
 import { prisma } from "@/utils/prisma";
-import { safeErrorResponse } from "@/utils/security";
+import { safeErrorResponse, maskSecret } from "@/utils/security";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -29,22 +29,37 @@ export async function GET() {
       await prisma.api_keys.deleteMany({ where: { id: { in: staleIds } } });
     }
 
-    // If user has no API key, generate exactly 1 default key
+    // If user has no API key, generate exactly 1 default key (hash-only)
     if (!currentKey) {
+      const rawKey = generateApiKey();
       currentKey = await prisma.api_keys.create({
         data: {
           user_id: user.id,
           name: "Production API Key",
-          key: generateApiKey(),
+          key_hash: hashApiKey(rawKey),
+        },
+      });
+      return NextResponse.json({
+        key: {
+          id: currentKey.id,
+          name: currentKey.name,
+          key: rawKey,
+          isLegacy: false,
+          isActive: currentKey.is_active,
+          createdAt: currentKey.created_at,
+          lastUsed: currentKey.last_used,
         },
       });
     }
 
+    // Key lama (plaintext di kolom key) tampilkan full. Key baru (hash) tampilkan masked.
+    const isLegacy = !currentKey.key_hash;
     return NextResponse.json({
       key: {
         id: currentKey.id,
         name: currentKey.name,
-        key: currentKey.key,
+        key: isLegacy ? currentKey.key : maskSecret(currentKey.key_hash || "", 6),
+        isLegacy,
         isActive: currentKey.is_active,
         createdAt: currentKey.created_at,
         lastUsed: currentKey.last_used,
@@ -66,12 +81,13 @@ export async function POST() {
       where: { user_id: user.id },
     });
 
-    // 2. Create brand new fresh key
+    // 2. Create brand new fresh key — simpan HASH saja, bukan plaintext (anti DB leak).
+    const rawKey = generateApiKey();
     const newKey = await prisma.api_keys.create({
       data: {
         user_id: user.id,
         name: "Production API Key",
-        key: generateApiKey(),
+        key_hash: hashApiKey(rawKey),
       },
     });
 
@@ -81,7 +97,8 @@ export async function POST() {
       key: {
         id: newKey.id,
         name: newKey.name,
-        key: newKey.key,
+        key: rawKey,
+        isLegacy: false,
         isActive: newKey.is_active,
         createdAt: newKey.created_at,
       },

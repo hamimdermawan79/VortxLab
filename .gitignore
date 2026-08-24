@@ -11,6 +11,8 @@ dist/
 # Uploads & Large Assets
 public/uploads/
 web/public/uploads/
+private/uploads/
+web/private/uploads/
 *.exe
 *.zip
 *.tar.gz
@@ -25,6 +27,8 @@ web/public/uploads/
 web/.env
 web/.env*.local
 web/.env.local
+proxies.txt
+daemons/proxies.txt
 
 # Python
 .venv/

@@ -1,15 +1,75 @@
 import { prisma } from "@/utils/prisma";
+import { isAllowedWebhookUrl } from "@/utils/security";
 
-const ENGINE_1 = "https://www.toptoplink.com/web/rechargeOrder.do";
-const ENGINE_2 = "https://i.urzvz.com/web/rechargeOrder.do";
+const ACTIVE_ENDPOINTS = [
+  "https://www.topbos.com/web/rechargeOrder.do",
+  "https://www.toptoplink.com/web/rechargeOrder.do",
+  "https://www.bosbosgames.com/web/rechargeOrder.do",
+];
+
 const MAINTENANCE_MSG = "Sistem sedang dalam maintenance.";
+
+export function parseSortirIds(rawText: string): string[] {
+  if (!rawText || typeof rawText !== "string") return [];
+  const lines = rawText.split(/\r?\n/);
+  const extracted: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // 1. Match explicit "ID: <number>" pattern
+    const m1 = trimmed.match(/\b(?:id|user_?id|uid)\s*[:=]\s*(\d{4,12})\b/i);
+    if (m1 && m1[1]) {
+      extracted.push(m1[1]);
+      continue;
+    }
+
+    // 2. Match start with "ID <number>"
+    const m2 = trimmed.match(/^id\s*[:=]?\s*(\d{4,12})/i);
+    if (m2 && m2[1]) {
+      extracted.push(m2[1]);
+      continue;
+    }
+
+    // 3. Delimited formats (pipe, tab, comma, colon, space) e.g. "35906623|PW|MAC" or "35906623,PW"
+    const tokens = trimmed.split(/[\t,|;:]+/).map((t) => t.trim()).filter(Boolean);
+    let found = false;
+    for (const token of tokens) {
+      if (/^\d{5,12}$/.test(token)) {
+        extracted.push(token);
+        found = true;
+        break;
+      }
+    }
+    if (found) continue;
+
+    // 4. Generic match for 5-12 digits sequence in the line
+    const m3 = trimmed.match(/\b\d{5,12}\b/);
+    if (m3) {
+      extracted.push(m3[0]);
+      continue;
+    }
+
+    // 5. Pure numbers fallback
+    const numOnly = trimmed.replace(/\D/g, "");
+    if (numOnly.length >= 5 && numOnly.length <= 12) {
+      extracted.push(numOnly);
+    }
+  }
+
+  return extracted;
+}
 
 interface CheckResult {
   id: string;
-  status: "AMAN" | "Banned";
+  status: "AMAN" | "Banned" | "Error";
 }
 
-async function checkSingleId(userId: string): Promise<CheckResult> {
+let rollingIndex = 0;
+
+async function checkSingleId(userId: string, retryCount = 0): Promise<CheckResult> {
+  const endpoint = ACTIVE_ENDPOINTS[(rollingIndex++) % ACTIVE_ENDPOINTS.length];
   const timestamp = Date.now();
   const body = new URLSearchParams({
     userId,
@@ -22,40 +82,51 @@ async function checkSingleId(userId: string): Promise<CheckResult> {
   const headers = {
     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
     "X-Requested-With": "XMLHttpRequest",
-    "User-Agent": "VortX-Master-Engine-Burst/8.0 (High-Throughput)",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   };
 
   try {
-    // Try primary engine
-    let res = await fetch(ENGINE_1, {
+    const res = await fetch(endpoint, {
       method: "POST",
       headers,
       body,
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(8000),
     });
 
-    if (!res.ok || res.status === 403 || res.status === 429) {
-      // Fallback engine
-      res = await fetch(ENGINE_2, {
-        method: "POST",
-        headers,
-        body,
-        signal: AbortSignal.timeout(10000),
-      });
-    }
-
     if (res.ok) {
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      const code = String(data?.code || "");
       const msg = data?.message || "";
-      const isBanned = msg === MAINTENANCE_MSG;
-      return { id: userId, status: isBanned ? "Banned" : "AMAN" };
+
+      if (code === "1125" || msg === MAINTENANCE_MSG) {
+        return { id: userId, status: "Banned" };
+      }
+
+      if (code === "0" && (data?.data || msg === "")) {
+        return { id: userId, status: "AMAN" };
+      }
+
+      // If code is 999 (degraded) or unfamiliar, retry with another endpoint
+      if (retryCount < 3) {
+        await new Promise((r) => setTimeout(r, 400));
+        return checkSingleId(userId, retryCount + 1);
+      }
+      return { id: userId, status: "Error" };
     }
 
-    // If both failed or blocked, return AMAN default or keep status
-    return { id: userId, status: "AMAN" };
+    // On 403, 429, 500, retry on alternate endpoint
+    if (retryCount < 3) {
+      await new Promise((r) => setTimeout(r, 500));
+      return checkSingleId(userId, retryCount + 1);
+    }
+
+    return { id: userId, status: "Error" };
   } catch (err) {
-    // On network timeout/error, mark as AMAN default
-    return { id: userId, status: "AMAN" };
+    if (retryCount < 3) {
+      await new Promise((r) => setTimeout(r, 500));
+      return checkSingleId(userId, retryCount + 1);
+    }
+    return { id: userId, status: "Error" };
   }
 }
 
@@ -125,8 +196,8 @@ export async function processSortirJobAsync(
       },
     });
 
-    // Dispatch Webhook if provided
-    if (webhookUrl && webhookUrl.startsWith("http")) {
+    // Dispatch Webhook if provided (re-validasi anti-SSRF defense-in-depth)
+    if (webhookUrl && isAllowedWebhookUrl(webhookUrl)) {
       dispatchWebhook(webhookUrl, {
         event: "sortir.completed",
         activity_id: jobId,

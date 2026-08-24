@@ -9,6 +9,7 @@ import AdmZip from 'adm-zip';
 import { getUser } from '@/utils/auth';
 import { prisma } from '@/utils/prisma';
 import { safeErrorResponse } from '@/utils/security';
+import { getUploadsDataDir } from '@/utils/uploads';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -28,7 +29,8 @@ export async function POST(req: NextRequest) {
 
     const contentType = req.headers.get('content-type') || '';
     const timestamp = Date.now().toString();
-    const saveDir = path.join(process.cwd(), 'public', 'uploads', 'data', timestamp);
+    // Storage dipindah dari public/ ke private/ — file kredensial user TIDAK boleh dilayani statis.
+    const saveDir = path.join(getUploadsDataDir(), timestamp);
     await mkdir(saveDir, { recursive: true });
 
     let filename = `archive_${timestamp}.zip`;
@@ -44,11 +46,17 @@ export async function POST(req: NextRequest) {
           filename = headerName;
         }
       }
+      // Sanitasi path traversal: ambil basename saja, buang direktori.
+      filename = path.basename(filename);
       if (!filename.toLowerCase().endsWith('.zip')) {
         filename += '.zip';
       }
 
       savePath = path.resolve(saveDir, filename);
+      // Containment check: pastikan hasil resolve tetap di dalam saveDir.
+      if (!savePath.startsWith(saveDir + path.sep)) {
+        return NextResponse.json({ error: 'INVALID_FILENAME', message: 'Nama file tidak valid.' }, { status: 400 });
+      }
 
       if (!req.body) {
         return NextResponse.json({ error: 'NO_BODY', message: 'Tidak ada data file dalam request.' }, { status: 400 });
@@ -64,12 +72,15 @@ export async function POST(req: NextRequest) {
       const file = formData.get('file') as File | null;
       if (!file) return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
 
-      filename = file.name;
+      filename = path.basename(file.name || 'archive.zip');
       if (!filename.toLowerCase().endsWith('.zip')) {
         return NextResponse.json({ error: 'INVALID_FORMAT', message: 'Hanya file .zip yang didukung saat ini' }, { status: 400 });
       }
 
       savePath = path.resolve(saveDir, filename);
+      if (!savePath.startsWith(saveDir + path.sep)) {
+        return NextResponse.json({ error: 'INVALID_FILENAME', message: 'Nama file tidak valid.' }, { status: 400 });
+      }
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
       await writeFile(savePath, buffer);

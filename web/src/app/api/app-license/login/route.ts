@@ -24,7 +24,14 @@ export async function POST(req: Request) {
 
     const license = await prisma.app_licenses.findUnique({ where: { app_id: appId } });
     if (!license || license.revoked_at || license.expires_at <= new Date()) return genericFailure();
-    if (hashValue(secret) !== license.secret_hash) return genericFailure();
+
+    // ponytail: timingSafeEqual anti timing-attack pada secret compare (hex sha256, panjang sama).
+    const providedHash = hashValue(secret);
+    const sigBuf = Buffer.from(providedHash);
+    const expBuf = Buffer.from(license.secret_hash);
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      return genericFailure();
+    }
 
     const hwidHash = hashValue(hwid);
     if (license.bound_hwid_hash && license.bound_hwid_hash !== hwidHash) {
