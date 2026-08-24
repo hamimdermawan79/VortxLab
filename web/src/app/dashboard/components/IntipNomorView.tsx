@@ -420,9 +420,7 @@ export default function IntipNomorView({
         <p className="text-[11px] text-amber-800 leading-relaxed">
           Jika fitur bermasalah, silahkan hubungi{" "}
           <a
-            href="https://wa.me/6281919027336"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/contact"
             className="font-semibold text-amber-700 underline underline-offset-2 hover:text-amber-900"
           >
             contact admin
