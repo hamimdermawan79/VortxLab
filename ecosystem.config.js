@@ -3,10 +3,12 @@ module.exports = {
     {
       name: "vortx-web",
       cwd: "./web",
-      script: "server.js",
+      script: ".next/standalone/server.js",
+      interpreter: "node",
       env: {
         PORT: 3000,
-        NODE_ENV: "production"
+        NODE_ENV: "production",
+        HOSTNAME: "0.0.0.0"
       },
       instances: 1,
       autorestart: true,
