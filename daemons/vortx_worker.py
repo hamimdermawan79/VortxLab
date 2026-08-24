@@ -72,7 +72,8 @@ DB_CONFIG = parse_db_config()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-UPLOADS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "private", "uploads")
+# Folder uploads KONSISTEN dengan web runtime: env UPLOADS_DIR (dari .env/ecosystem) > default web/private/uploads
+UPLOADS_DIR = os.getenv("UPLOADS_DIR") or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "private", "uploads")
 
 # Concurrency settings for Sortir Banned
 MASTER_WORKER_SLOTS = 5
