@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { safeErrorResponse } from '@/utils/security';
+import { getUploadsDir } from '@/utils/uploads';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { getUser } from '@/utils/auth';
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
     const dupCount = rawEntries.length - deduped.length;
 
     // Storage private — file kredensial tidak dilayani statis.
-    const uploadDir = path.join(process.cwd(), 'private', 'uploads');
+    const uploadDir = getUploadsDir();
     await mkdir(uploadDir, { recursive: true });
     const fileName = Date.now() + '_' + (file.name || 'upload').replace(/[^a-zA-Z0-9._-]/g, '_');
     const filePath = path.join(uploadDir, fileName);
