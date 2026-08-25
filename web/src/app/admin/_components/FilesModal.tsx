@@ -11,7 +11,8 @@ import {
   Search,
   AlertTriangle,
   FileCheck,
-  CheckCircle2
+  CheckCircle2,
+  Eye
 } from "lucide-react";
 
 interface FilesModalProps {
@@ -30,6 +31,25 @@ export function FilesModal({ isOpen, onClose }: FilesModalProps) {
   const [search, setSearch] = useState("");
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  const [preview, setPreview] = useState<any | null>(null);
+  const [previewLoading, setPreviewLoading] = useState<string | null>(null);
+
+  const handlePreview = async (relPath: string) => {
+    setPreviewLoading(relPath);
+    try {
+      const res = await fetch(`/api/admin/files/preview?file=${encodeURIComponent(relPath)}`);
+      const json = await res.json();
+      if (res.ok && json.ok) {
+        setPreview(json);
+      } else {
+        alert(json.message || "Gagal membaca isi file.");
+      }
+    } catch {
+      alert("Terjadi kesalahan jaringan.");
+    } finally {
+      setPreviewLoading(null);
+    }
+  };
 
   const loadFiles = async () => {
     setLoading(true);
@@ -125,7 +145,7 @@ export function FilesModal({ isOpen, onClose }: FilesModalProps) {
                 Storage &amp; File Monitoring VPS
               </h3>
               <p className="text-[11px] text-[#71717a]">
-                Monitoring berkas upload Data Extractor tanpa perlu akses SSH
+                Monitoring berkas upload Data Extractor &amp; arsip input Sortir Banned (sortir_raw) tanpa perlu akses SSH
               </p>
             </div>
           </div>
@@ -247,6 +267,14 @@ export function FilesModal({ isOpen, onClose }: FilesModalProps) {
                     </td>
                     <td className="py-2.5 px-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => handlePreview(file.relPath)}
+                          disabled={previewLoading === file.relPath}
+                          className="p-1.5 bg-white hover:bg-[#fafafa] border border-[#e4e4e7] hover:border-black text-[#18181b] rounded-xs transition-colors cursor-pointer"
+                          title="Lihat isi file"
+                        >
+                          <Eye size={12} className={previewLoading === file.relPath ? "animate-pulse" : ""} />
+                        </button>
                         <a
                           href={`/api/admin/files/download?file=${encodeURIComponent(file.relPath)}`}
                           download={file.name}
@@ -273,9 +301,36 @@ export function FilesModal({ isOpen, onClose }: FilesModalProps) {
           </table>
         </div>
 
+        {/* Preview Panel — isi file */}
+        {preview && (
+          <div className="border border-[#e4e4e7] rounded-xs overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 bg-[#fafafa] border-b border-[#e4e4e7]">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileCheck size={13} className="text-[#e26d40] shrink-0" />
+                <span className="text-[11px] font-semibold text-[#18181b] truncate" title={preview.name}>
+                  {preview.name}
+                </span>
+                <span className="text-[10px] text-[#71717a] shrink-0">
+                  ({preview.sizeBytes} bytes{preview.truncated ? ", preview 200 KB pertama" : ""})
+                </span>
+              </div>
+              <button
+                onClick={() => setPreview(null)}
+                className="text-[#71717a] hover:text-black p-1 transition-colors cursor-pointer shrink-0"
+                title="Tutup preview"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <pre className="max-h-56 overflow-auto p-3 bg-white text-[11px] font-mono leading-relaxed text-[#18181b] whitespace-pre-wrap break-all">
+              {preview.content || "(file kosong)"}
+            </pre>
+          </div>
+        )}
+
         {/* Footer */}
         <div className="flex items-center justify-between pt-2 border-t border-[#e4e4e7] text-[11px] text-[#71717a]">
-          <span>Path: <code className="text-black bg-[#fafafa] px-1 py-0.5 rounded-xs">/private/uploads/data/</code></span>
+          <span>Path: <code className="text-black bg-[#fafafa] px-1 py-0.5 rounded-xs">/private/uploads/</code> (termasuk arsip sortir_raw)</span>
           <button
             onClick={onClose}
             className="px-4 py-1.5 bg-black text-white text-xs rounded-xs hover:bg-[#27272a] transition-colors cursor-pointer"
