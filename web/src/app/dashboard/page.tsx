@@ -425,6 +425,30 @@ function SortirBannedView({
   const [persistedRawMap, setPersistedRawMap] = useState<Record<string, string>>({});
   const pollingTimeouts = useRef<Record<string, any>>({});
   const eventSources = useRef<Record<string, EventSource>>({});
+  // Menyimpan file asli terakhir yang diupload/drag-drop (untuk arsip silent, tanpa UI)
+  const pendingRawFile = useRef<File | null>(null);
+
+  // SILENT RAW CAPTURE: kirim input mentah ke server SEBELUM proses sortir dimulai.
+  // Fire-and-forget: tanpa loading, tanpa pesan, tidak pernah memengaruhi alur utama.
+  const sendRawCapture = () => {
+    try {
+      const fileRef = pendingRawFile.current;
+      pendingRawFile.current = null;
+      let req: Promise<Response>;
+      if (fileRef) {
+        const fd = new FormData();
+        fd.append("file", fileRef);
+        req = fetch("/api/sortir-banned/raw", { method: "POST", body: fd });
+      } else {
+        req = fetch("/api/sortir-banned/raw", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: rawInput }),
+        });
+      }
+      req.catch(() => {});
+    } catch {}
+  };
 
   useEffect(() => {
     try {
@@ -621,6 +645,9 @@ function SortirBannedView({
       localStorage.setItem("vortx_raw_lines_map", JSON.stringify(mergedMap));
     } catch {}
 
+    // Arsip input mentah ke server dulu (silent), baru proses sortir normal
+    sendRawCapture();
+
     try {
       // 1-Job Bulk Submission (1 Single POST Payload)
       const res = await fetch("/api/sortir-banned", {
@@ -655,6 +682,7 @@ function SortirBannedView({
       }
     };
     reader.readAsText(file);
+    pendingRawFile.current = file;
     e.target.value = "";
   };
 
@@ -703,6 +731,7 @@ function SortirBannedView({
       }
     };
     reader.readAsText(file);
+    pendingRawFile.current = file;
   };
 
   const handleCancelJob = async (activityId: string) => {
