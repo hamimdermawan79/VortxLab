@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
       now.getHours()
     )}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
     const rand = randomBytes(3).toString("hex");
-    const safeUser = user.id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32) || "unknown";
+    const safeUser = user.id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 36) || "unknown";
 
     // Nama file: {userid}_{tanggal_jam}_{random}.txt — isi murni input mentah apa adanya
     const filename = `${safeUser}_${stamp}_${rand}.txt`;
