@@ -38,6 +38,7 @@ import NewCheckerView from "./components/NewCheckerView";
 import IntipNomorView from "./components/IntipNomorView";
 import CekInfoAkunView from "./components/CekInfoAkunView";
 import HeadlessDataCheckerView from "./components/HeadlessDataCheckerView";
+import DesktopExtractorLicenseView from "./components/DesktopExtractorLicenseView";
 import VortXLogo from "@/components/VortXLogo";
 import Footer from "@/components/Footer";
 
@@ -2477,11 +2478,15 @@ export default function DashboardPage() {
               )}
 
               {activeHiggsTool.sku === "data-extractor" && (
-                <DataExtractorView
-                  userBalance={userProfile?.vcoin_balance || 0}
-                  costPerUse={toolCost}
-                  onSuccess={fetchProfile}
-                />
+                <>
+                  <DataExtractorView
+                    userBalance={userProfile?.vcoin_balance || 0}
+                    costPerUse={toolCost}
+                    onSuccess={fetchProfile}
+                  />
+                  <div className="border-t border-[#e4e4e7] my-6" />
+                  <DesktopExtractorLicenseView onBalanceChange={fetchProfile} />
+                </>
               )}
 
               {activeHiggsTool.sku === "new-checker" && <NewCheckerView onBalanceChange={fetchProfile} />}

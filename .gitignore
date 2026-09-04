@@ -56,6 +56,12 @@ pnpm-debug.log*
 .vscode/
 .idea/
 
+# Build Products
+build-products/
+
+# Scratch / temp
+scratch/
+
 # OS Files
 .DS_Store
 Thumbs.db
