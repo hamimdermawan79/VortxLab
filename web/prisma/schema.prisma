@@ -128,9 +128,22 @@ model app_licenses {
   product        products @relation(fields: [product_sku], references: [sku], onDelete: Cascade)
   sessions       app_license_sessions[]
   reset_events_log app_license_reset_events[]
+  product_access app_license_product_access[]
 
   @@index([user_id])
   @@index([expires_at])
+}
+
+model app_license_product_access {
+  id          String   @id @default(uuid())
+  license_id  String
+  product_sku String
+  granted_at  DateTime @default(now())
+
+  license     app_licenses @relation(fields: [license_id], references: [id], onDelete: Cascade)
+
+  @@unique([license_id, product_sku])
+  @@index([product_sku])
 }
 
 model app_license_sessions {

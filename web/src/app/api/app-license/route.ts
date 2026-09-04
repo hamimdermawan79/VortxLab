@@ -51,13 +51,20 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const action = body.action === "generate" ? "generate" : "activate";
+
+    // SKU target product. Default: NewChecker (web tools). Data Extractor dapat
+    // mengirim product_sku = "desktop-extractor" agar VRTXID punya akses ke app desktop.
+    const requestedSku = typeof body.product_sku === "string" && body.product_sku.trim()
+      ? body.product_sku.trim()
+      : APP_PRODUCT_SKU;
+
     const product = await prisma.products.upsert({
-      where: { sku: APP_PRODUCT_SKU },
+      where: { sku: requestedSku },
       update: {},
       create: {
-        sku: APP_PRODUCT_SKU,
-        name: "NewChecker",
-        display_name: "NewChecker",
+        sku: requestedSku,
+        name: requestedSku === "desktop-extractor" ? "VortX Desktop Extractor" : "NewChecker",
+        display_name: requestedSku === "desktop-extractor" ? "VortX Desktop Extractor" : "NewChecker",
         cost_per_day: 10_000,
         min_day_rent: 1,
         is_active: true,
@@ -65,7 +72,7 @@ export async function POST(req: Request) {
     });
     if (!product.is_active) {
       return NextResponse.json(
-        { error: "PRODUCT_UNAVAILABLE", message: "Produk NewChecker sedang nonaktif. Hubungi admin." },
+        { error: "PRODUCT_UNAVAILABLE", message: "Produk sedang nonaktif. Hubungi admin." },
         { status: 404 }
       );
     }
@@ -86,7 +93,10 @@ export async function POST(req: Request) {
             expires_at: now,
             download_url: process.env.NEW_CHECKER_DOWNLOAD_URL || null,
             reset_events: [],
-          },
+            product_access: {
+              create: { product_sku: product.sku },
+            },
+          } as any,
         });
         await tx.profiles.update({ where: { id: user.id }, data: { vcoin_balance: { decrement: VRTX_ID_COST } } });
         await tx.transactions.create({
