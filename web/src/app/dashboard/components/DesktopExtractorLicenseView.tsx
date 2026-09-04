@@ -10,7 +10,7 @@ interface PackageItem {
   offer?: string;
 }
 
-const PACKAGES: PackageItem[] = [
+const DEFAULT_PACKAGES: PackageItem[] = [
   { id: "6h", label: "6 Jam", cost: 10000 },
   { id: "12h", label: "12 Jam", cost: 20000 },
   { id: "24h", label: "24 Jam", cost: 38000, offer: "Hemat 5%" },
@@ -44,7 +44,8 @@ function durationLeft(expiresAt: string) {
 
 export default function DesktopExtractorLicenseView({ onBalanceChange }: { onBalanceChange: () => void }) {
   const [licenses, setLicenses] = useState<License[]>([]);
-  const [packageId, setPackageId] = useState<(typeof PACKAGES)[number]["id"]>("24h");
+  const [packages, setPackages] = useState<PackageItem[]>(DEFAULT_PACKAGES);
+  const [packageId, setPackageId] = useState<(typeof DEFAULT_PACKAGES)[number]["id"]>("24h");
   const [selectedLicenseId, setSelectedLicenseId] = useState("");
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
@@ -60,6 +61,20 @@ export default function DesktopExtractorLicenseView({ onBalanceChange }: { onBal
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal memuat subscription");
       setLicenses(data.licenses || []);
+      const cfg = data.product_config;
+      if (cfg) {
+        if (cfg.download_url) setDownloadUrl(cfg.download_url);
+        if (cfg.package_prices && typeof cfg.package_prices === "object") {
+          setPackages((prev) =>
+            prev.map((pkg) => ({
+              ...pkg,
+              cost: Number((cfg.package_prices as Record<string, number>)[pkg.id]) > 0
+                ? Number((cfg.package_prices as Record<string, number>)[pkg.id])
+                : pkg.cost,
+            }))
+          );
+        }
+      }
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -126,16 +141,6 @@ export default function DesktopExtractorLicenseView({ onBalanceChange }: { onBal
     setTimeout(() => setCopied(false), 1500);
   };
 
-  useEffect(() => {
-    fetch("/api/app-license", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => {
-        const dl = (d.licenses || []).find((l: any) => l.download_url)?.download_url;
-        if (dl) setDownloadUrl(dl);
-      })
-      .catch(() => {});
-  }, []);
-
   // VRTXID yang bisa dipakai: yang activated/data-extractor access
   const usable = licenses.filter((l) => !l.revoked_at);
 
@@ -143,28 +148,36 @@ export default function DesktopExtractorLicenseView({ onBalanceChange }: { onBal
     <div className="space-y-6">
       {error && <div className="p-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xs">{error}</div>}
 
-      <section className="border border-[#e4e4e7] rounded-xs p-5 space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider">Download Desktop Extractor</p>
-            <p className="text-[11px] text-[#71717a] mt-1">Download aplikasi Data Extractor (desktop) versi terbaru. Aktivasi diverifikasi saat aplikasi dibuka.</p>
-          </div>
-          {downloadUrl ? (
-            <a href={downloadUrl} target="_blank" rel="noreferrer" className="px-3 py-2 bg-black text-white text-xs rounded-xs flex items-center gap-1.5"><Download size={13} /> Download .exe</a>
-          ) : (
-            <span className="px-3 py-2 text-[11px] text-[#71717a] border border-[#e4e4e7] rounded-xs">Akan diumumkan</span>
-          )}
+      {/* ===== 1. DOWNLOAD OFFLINE DATA EXTRACTOR ===== */}
+      <section className="border border-[#e4e4e7] rounded-xs p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-[#0b0b0f] to-[#16161c]">
+        <div className="text-white">
+          <p className="text-sm font-semibold tracking-wide">Download Offline Data Extractor (.conf/.xml)</p>
         </div>
+        {downloadUrl ? (
+          <a href={downloadUrl} target="_blank" rel="noreferrer" className="shrink-0 px-5 py-2.5 bg-white text-black text-xs font-semibold rounded-xs flex items-center gap-1.5 hover:bg-orange-500 hover:text-white transition-colors">
+            <Download size={14} /> Download
+          </a>
+        ) : (
+          <span className="shrink-0 px-5 py-2.5 text-[11px] font-medium text-white/70 border border-white/20 rounded-xs">Link belum tersedia</span>
+        )}
       </section>
 
-      <section className="border border-[#e4e4e7] rounded-xs p-5 space-y-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider">Generate VRTXID</p>
-          <p className="text-[11px] text-[#71717a] mt-1">Buat ID untuk Data Extractor desktop. Biaya generate: 100 token. VRTXID yang sama juga bisa dipakai di Data Checker Tools.</p>
+      {/* ===== 2. GENERATE VRTXID ===== */}
+      <section className="rounded-xs p-6 space-y-4 border-2 border-orange-500 bg-orange-50 shadow-2xs">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 bg-orange-600 rounded-xs text-white shadow-2xs">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <div>
+            <p className="text-base font-bold text-[#18181b] leading-tight">Generate VRTXID</p>
+            <p className="text-[11px] text-[#52525b] mt-0.5">Buat ID untuk Data Extractor desktop · biaya <span className="font-mono font-semibold">100 token</span>. VRTXID yang sama juga bisa dipakai di Data Checker Tools.</p>
+          </div>
         </div>
-        <button onClick={generate} disabled={purchasing} className="w-full py-2.5 border border-black text-black text-xs rounded-xs disabled:opacity-50">{purchasing ? <Loader2 size={14} className="animate-spin mx-auto" /> : "Generate VRTXID · 100 token"}</button>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider">Aktivasi VRTXID</p>
+        <button onClick={generate} disabled={purchasing} className="w-full py-3 bg-orange-600 text-white text-sm font-bold rounded-xs hover:bg-orange-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm">
+          {purchasing ? <Loader2 size={16} className="animate-spin" /> : <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15.6 3.4A2 2 0 1 1 17 6l-9.8 9.8-3.4 1 1-3.4Z"/><path d="M13 5l6 6"/></svg> Generate VRTXID · 100 token</>}
+        </button>
+        <div className="border-t border-orange-200 pt-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#18181b]">Aktivasi VRTXID</p>
           <p className="text-[11px] text-[#71717a] mt-1">Pilih VRTXID belum aktif yang punya akses Data Extractor, lalu pilih durasi.</p>
         </div>
         <select value={selectedLicenseId} onChange={(event) => setSelectedLicenseId(event.target.value)} className="w-full border border-[#e4e4e7] rounded-xs px-3 py-2 text-xs bg-white">
@@ -172,8 +185,8 @@ export default function DesktopExtractorLicenseView({ onBalanceChange }: { onBal
           {usable.filter((license) => !license.activated && (license.has_desktop_access || license.hwid || true)).map((license) => <option key={license.id} value={license.id}>{license.app_id} · Belum aktivasi</option>)}
         </select>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-          {PACKAGES.map((pkg) => (
-            <button key={pkg.id} onClick={() => setPackageId(pkg.id)} className={`relative text-left p-3 rounded-xs border ${packageId === pkg.id ? "bg-black text-white border-black" : "bg-[#fafafa] border-[#e4e4e7]"}`}>
+          {packages.map((pkg) => (
+            <button key={pkg.id} onClick={() => setPackageId(pkg.id)} className={`relative text-left p-3 rounded-xs border ${packageId === pkg.id ? "bg-black text-white border-black" : "bg-white border-[#e4e4e7]"}`}>
               {pkg.offer && <span className={`absolute -top-2 right-2 px-1.5 py-0.5 text-[9px] rounded-xs ${packageId === pkg.id ? "bg-white text-black" : "bg-black text-white"}`}>{pkg.offer}</span>}
               <p className="text-xs font-semibold">{pkg.label}</p>
               <p className="text-sm font-mono mt-2">{pkg.cost.toLocaleString("id-ID")}</p>
@@ -181,7 +194,7 @@ export default function DesktopExtractorLicenseView({ onBalanceChange }: { onBal
             </button>
           ))}
         </div>
-        <button onClick={purchase} disabled={purchasing || !selectedLicenseId} className="w-full py-2.5 bg-black text-white text-xs rounded-xs disabled:opacity-50">{purchasing ? <Loader2 size={14} className="animate-spin mx-auto" /> : `Aktifkan VRTXID · ${PACKAGES.find((pkg) => pkg.id === packageId)?.cost.toLocaleString("id-ID")} token`}</button>
+        <button onClick={purchase} disabled={purchasing || !selectedLicenseId} className="w-full py-2.5 bg-black text-white text-xs rounded-xs disabled:opacity-50">{purchasing ? <Loader2 size={14} className="animate-spin mx-auto" /> : `Aktifkan VRTXID · ${packages.find((pkg) => pkg.id === packageId)?.cost.toLocaleString("id-ID")} token`}</button>
       </section>
 
       {newSecret && (
