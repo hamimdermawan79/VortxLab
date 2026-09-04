@@ -76,6 +76,8 @@ model products {
   display_name  String?
   cost_per_day  Int      @default(100)
   min_day_rent  Int      @default(1)
+  package_prices Json?
+  download_url  String?
   is_active     Boolean  @default(true)
   created_at    DateTime @default(now())
 

@@ -20,7 +20,17 @@ export async function GET() {
   });
 
   const now = Date.now();
+
+  const desktopProduct = await prisma.products.findUnique({
+    where: { sku: DESKTOP_SKU },
+    select: { package_prices: true, download_url: true, cost_per_day: true },
+  });
+
   return NextResponse.json({
+    product_config: {
+      package_prices: (desktopProduct?.package_prices as Record<string, number> | null) || null,
+      download_url: desktopProduct?.download_url || null,
+    },
     licenses: licenses.map((license) => ({
       id: license.id,
       app_id: license.app_id,
@@ -76,6 +86,12 @@ export async function POST(req: Request) {
     const activationPackage = getActivationPackage(packageId);
     if (!activationPackage) return NextResponse.json({ error: "INVALID_REQUEST" }, { status: 400 });
 
+    const desktopProduct = await prisma.products.findUnique({ where: { sku: DESKTOP_SKU } });
+    const packagePrices = (desktopProduct?.package_prices as Record<string, number> | null) || {};
+    const adminCost = Number(packagePrices[packageId]);
+    const cost = Number.isFinite(adminCost) && adminCost > 0 ? adminCost : activationPackage.cost;
+    const hours = activationPackage.hours;
+
     const license = await prisma.app_licenses.findFirst({
       where: { id: licenseId, user_id: user.id },
       include: { product_access: true },
@@ -100,25 +116,25 @@ export async function POST(req: Request) {
       });
     }
 
-    const expiresAt = new Date(now.getTime() + activationPackage.hours * 60 * 60 * 1000);
+    const expiresAt = new Date(now.getTime() + hours * 60 * 60 * 1000);
     const updated = await prisma.$transaction(async (tx) => {
       const profile = await tx.profiles.findUnique({ where: { id: user.id }, select: { vcoin_balance: true } });
-      if (!profile || profile.vcoin_balance < activationPackage.cost) throw new Error("INSUFFICIENT_BALANCE");
+      if (!profile || profile.vcoin_balance < cost) throw new Error("INSUFFICIENT_BALANCE");
       const up = await tx.app_licenses.update({ where: { id: license.id }, data: { expires_at: expiresAt } });
-      await tx.profiles.update({ where: { id: user.id }, data: { vcoin_balance: { decrement: activationPackage.cost } } });
+      await tx.profiles.update({ where: { id: user.id }, data: { vcoin_balance: { decrement: cost } } });
       await tx.transactions.create({
         data: {
           user_id: user.id,
           type: "app_subscription",
-          amount: -activationPackage.cost,
+          amount: -cost,
           status: "completed",
-          meta_data: { product_sku: DESKTOP_SKU, package_id: packageId, duration_hours: activationPackage.hours, app_id: license.app_id },
+          meta_data: { product_sku: DESKTOP_SKU, package_id: packageId, duration_hours: hours, app_id: license.app_id },
         },
       });
       return up;
     });
 
-    return NextResponse.json({ success: true, license: { id: updated.id, app_id: updated.app_id, expires_at: updated.expires_at, cost: activationPackage.cost } });
+    return NextResponse.json({ success: true, license: { id: updated.id, app_id: updated.app_id, expires_at: updated.expires_at, cost } });
   } catch (error: any) {
     const messages: Record<string, string> = {
       INSUFFICIENT_BALANCE: "Saldo token tidak mencukupi.",

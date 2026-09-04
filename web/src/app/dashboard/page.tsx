@@ -1780,26 +1780,6 @@ function DataExtractorView({
         </div>
       )}
 
-      {/* Offline Desktop Tools Card (Soon) */}
-      <div className="bg-[#fafafa] border border-[#e4e4e7] rounded-xs p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-2xs">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 bg-white border border-[#e4e4e7] rounded-xs text-[#71717a] shadow-2xs">
-            <FolderArchive size={16} className="text-black" />
-          </div>
-          <div>
-            <span className="font-semibold text-[#18181b] block">VortX Offline Extractor (Desktop App)</span>
-            <span className="text-[11px] text-[#71717a]">Untuk arsip file besar (&gt;10MB hingga ratusan ribu file .conf), gunakan tools offline mandiri kami.</span>
-          </div>
-        </div>
-        <button
-          type="button"
-          disabled
-          className="px-3 py-1.5 bg-white border border-[#e4e4e7] text-[11px] font-mono text-[#71717a] rounded-xs font-semibold shrink-0 cursor-not-allowed shadow-2xs"
-        >
-          Download Tools (Soon)
-        </button>
-      </div>
-
       {/* STANDALONE BACKGROUND PREVIEW (PURE TYPOGRAPHY & NOTEPAD WINDOWS) */}
       <div className="pt-3 space-y-3">
         {/* Pure Typography Claim */}
