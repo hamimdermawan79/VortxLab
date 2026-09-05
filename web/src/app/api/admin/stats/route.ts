@@ -146,7 +146,7 @@ export async function GET() {
       .sort((a, b) => a.date.localeCompare(b.date));
 
     // Service revenue
-    const activeServicesList = ['sortir-banned', 'data-extractor', 'intip-nomor', 'cek-info-akun'];
+    const activeServicesList = ['sortir-banned', 'sortir-family', 'sortir-polos', 'data-extractor', 'intip-nomor', 'cek-info-akun'];
     const serviceConfigs = await prisma.service_configs.findMany({
       select: { service_type: true, cost_per_id: true }
     });

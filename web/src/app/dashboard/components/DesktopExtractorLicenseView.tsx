@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Copy, Download, Loader2, RefreshCw } from "lucide-react";
+import { Download, Loader2, RefreshCw } from "lucide-react";
 
 interface PackageItem {
   id: "6h" | "12h" | "24h" | "7d" | "30d";
@@ -50,8 +50,7 @@ export default function DesktopExtractorLicenseView({ onBalanceChange }: { onBal
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
   const [error, setError] = useState("");
-  const [newSecret, setNewSecret] = useState<{ app_id: string; app_secret: string } | null>(null);
-  const [copied, setCopied] = useState(false);
+
   const [downloadUrl, setDownloadUrl] = useState<string>("");
 
   const load = async () => {
@@ -87,7 +86,6 @@ export default function DesktopExtractorLicenseView({ onBalanceChange }: { onBal
   const generate = async () => {
     setPurchasing(true);
     setError("");
-    setNewSecret(null);
     try {
       const res = await fetch("/api/app-license", {
         method: "POST",
@@ -96,7 +94,6 @@ export default function DesktopExtractorLicenseView({ onBalanceChange }: { onBal
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Gagal generate VRTXID.");
-      setNewSecret({ app_id: data.license.app_id, app_secret: data.license.app_secret });
       setSelectedLicenseId(data.license.id);
       await load();
       onBalanceChange();
@@ -134,12 +131,6 @@ export default function DesktopExtractorLicenseView({ onBalanceChange }: { onBal
     await load();
   };
 
-  const copyCredentials = async () => {
-    if (!newSecret) return;
-    await navigator.clipboard.writeText(`${newSecret.app_id}.${newSecret.app_secret}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
 
   // VRTXID yang bisa dipakai: yang activated/data-extractor access
   const usable = licenses.filter((l) => !l.revoked_at);
@@ -197,13 +188,6 @@ export default function DesktopExtractorLicenseView({ onBalanceChange }: { onBal
         <button onClick={purchase} disabled={purchasing || !selectedLicenseId} className="w-full py-2.5 bg-black text-white text-xs rounded-xs disabled:opacity-50">{purchasing ? <Loader2 size={14} className="animate-spin mx-auto" /> : `Aktifkan VRTXID · ${packages.find((pkg) => pkg.id === packageId)?.cost.toLocaleString("id-ID")} token`}</button>
       </section>
 
-      {newSecret && (
-        <section className="bg-emerald-50 border border-emerald-200 rounded-xs p-4 space-y-3">
-          <p className="text-xs font-semibold text-emerald-800">Kode aktivasi dibuat. Simpan kode ini; tidak ditampilkan ulang.</p>
-          <code className="block text-xs break-all bg-white border border-emerald-200 p-3 rounded-xs">{newSecret.app_id}.{newSecret.app_secret}</code>
-          <button onClick={copyCredentials} className="px-3 py-1.5 bg-black text-white text-xs rounded-xs flex items-center gap-1.5">{copied ? <Check size={13} /> : <Copy size={13} />} Salin kode aktivasi</button>
-        </section>
-      )}
 
       <section className="space-y-3">
         <div className="flex items-center justify-between"><p className="text-xs font-semibold uppercase tracking-wider">VRTXID Saya</p><button onClick={load} className="text-xs"><RefreshCw size={13} className={loading ? "animate-spin" : ""} /></button></div>

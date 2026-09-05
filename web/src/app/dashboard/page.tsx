@@ -29,7 +29,9 @@ import {
   UserCheck,
   Zap,
   Cpu,
-  CreditCard
+  CreditCard,
+  Users,
+  CircleUser
 } from "lucide-react";
 import AIModelsCatalog from "./components/AIModelsCatalog";
 import ServerlessInferenceView from "./components/ServerlessInferenceView";
@@ -39,6 +41,8 @@ import IntipNomorView from "./components/IntipNomorView";
 import CekInfoAkunView from "./components/CekInfoAkunView";
 import HeadlessDataCheckerView from "./components/HeadlessDataCheckerView";
 import DesktopExtractorLicenseView from "./components/DesktopExtractorLicenseView";
+import SortirFamilyView from "./components/SortirFamilyView";
+import SortirPolosView from "./components/SortirPolosView";
 import VortXLogo from "@/components/VortXLogo";
 import Footer from "@/components/Footer";
 
@@ -48,6 +52,18 @@ const HIGGS_PRODUCTS = [
     label: "Sortir Banned",
     icon: Shield,
     cost: 20,
+  },
+  {
+    sku: "sortir-family",
+    label: "Sortir Family",
+    icon: Users,
+    cost: 25,
+  },
+  {
+    sku: "sortir-polos",
+    label: "Sortir Polos",
+    icon: CircleUser,
+    cost: 50,
   },
   {
     sku: "intip-nomor",
@@ -2438,6 +2454,22 @@ export default function DashboardPage() {
                   userBalance={userProfile?.vcoin_balance || 0}
                   costPerUse={toolCost}
                   onSuccess={fetchProfile}
+                />
+              )}
+
+              {activeHiggsTool.sku === "sortir-family" && (
+                <SortirFamilyView
+                  userBalance={userProfile?.vcoin_balance || 0}
+                  costPerId={toolCost}
+                  onBalanceChange={fetchProfile}
+                />
+              )}
+
+              {activeHiggsTool.sku === "sortir-polos" && (
+                <SortirPolosView
+                  userBalance={userProfile?.vcoin_balance || 0}
+                  costPerId={toolCost}
+                  onBalanceChange={fetchProfile}
                 />
               )}
 

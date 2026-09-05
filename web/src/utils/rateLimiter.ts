@@ -8,6 +8,8 @@ interface RequestLog {
 const sortirRateLimitMap = new Map<string, RequestLog[]>();
 const intipNomorRateLimitMap = new Map<string, RequestLog[]>();
 const cekInfoAkunRateLimitMap = new Map<string, RequestLog[]>();
+const sortirFamilyRateLimitMap = new Map<string, RequestLog[]>();
+const sortirPolosRateLimitMap = new Map<string, RequestLog[]>();
 const loginAttemptRateLimitMap = new Map<string, RequestLog[]>();
 const registerRateLimitMap = new Map<string, RequestLog[]>();
 const trackRateLimitMap = new Map<string, RequestLog[]>();
@@ -38,6 +40,20 @@ if (typeof setInterval !== "undefined") {
       const active = logs.filter((log) => now - log.timestamp < oneHourMs);
       if (active.length === 0) cekInfoAkunRateLimitMap.delete(userId);
       else cekInfoAkunRateLimitMap.set(userId, active);
+    }
+
+    // Clean Sortir Family
+    for (const [userId, logs] of sortirFamilyRateLimitMap.entries()) {
+      const active = logs.filter((log) => now - log.timestamp < oneMinMs);
+      if (active.length === 0) sortirFamilyRateLimitMap.delete(userId);
+      else sortirFamilyRateLimitMap.set(userId, active);
+    }
+
+    // Clean Sortir Polos
+    for (const [userId, logs] of sortirPolosRateLimitMap.entries()) {
+      const active = logs.filter((log) => now - log.timestamp < oneMinMs);
+      if (active.length === 0) sortirPolosRateLimitMap.delete(userId);
+      else sortirPolosRateLimitMap.set(userId, active);
     }
 
     // Clean Login Attempts (15 menit window)
@@ -303,4 +319,71 @@ export function checkCekInfoAkunRateLimit(
     remaining: MAX_PER_HOUR - (currentRequests + 1),
     retryAfterSeconds: 0,
   };
+}
+
+// 4. Rate Limiter for Sortir Family & Sortir Polos (batch per-request, max 2000 IDs/req)
+function checkSortirBatchRateLimit(
+  map: Map<string, RequestLog[]>,
+  featureName: string,
+  userId: string,
+  requestedCount: number
+): {
+  allowed: boolean;
+  limit: number;
+  remaining: number;
+  retryAfterSeconds: number;
+  error?: string;
+} {
+  const MAX_PER_REQUEST = 2000;
+  const MAX_PER_MINUTE = 30; // 30 requests per minute
+  const WINDOW_MS = 60 * 1000;
+  const now = Date.now();
+
+  if (requestedCount > MAX_PER_REQUEST) {
+    return {
+      allowed: false,
+      limit: MAX_PER_REQUEST,
+      remaining: 0,
+      retryAfterSeconds: 0,
+      error: `BATCH_SIZE_EXCEEDED: Maksimal ${MAX_PER_REQUEST.toLocaleString()} ID per permintaan untuk fitur ${featureName}. Silakan perkecil ukuran batch Anda.`,
+    };
+  }
+
+  const userLogs = map.get(userId) || [];
+  const recentLogs = userLogs.filter((log) => now - log.timestamp < WINDOW_MS);
+
+  if (recentLogs.length >= MAX_PER_MINUTE) {
+    const oldestLog = recentLogs[0];
+    const retryAfter = oldestLog
+      ? Math.ceil((oldestLog.timestamp + WINDOW_MS - now) / 1000)
+      : 60;
+
+    return {
+      allowed: false,
+      limit: MAX_PER_MINUTE,
+      remaining: 0,
+      retryAfterSeconds: Math.max(1, retryAfter),
+      error: `RATE_LIMIT_EXCEEDED: Batas ${featureName} adalah ${MAX_PER_MINUTE} permintaan per menit. Silakan tunggu ${Math.max(1, retryAfter)} detik.`,
+    };
+  }
+
+  recentLogs.push({ timestamp: now, count: requestedCount });
+  map.set(userId, recentLogs);
+
+  return {
+    allowed: true,
+    limit: MAX_PER_MINUTE,
+    remaining: MAX_PER_MINUTE - recentLogs.length,
+    retryAfterSeconds: 0,
+  };
+}
+
+// 4a. Rate Limiter for Sortir Family
+export function checkSortirFamilyRateLimit(userId: string, requestedCount: number) {
+  return checkSortirBatchRateLimit(sortirFamilyRateLimitMap, "Sortir Family", userId, requestedCount);
+}
+
+// 4b. Rate Limiter for Sortir Polos
+export function checkSortirPolosRateLimit(userId: string, requestedCount: number) {
+  return checkSortirBatchRateLimit(sortirPolosRateLimitMap, "Sortir Polos", userId, requestedCount);
 }

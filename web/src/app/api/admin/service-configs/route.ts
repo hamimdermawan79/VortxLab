@@ -20,6 +20,8 @@ export async function GET() {
     const defaultServices = [
       { service_type: 'sortir-banned', cost_per_id: 20 },
       { service_type: 'sortir-banned-api', cost_per_id: 20 },
+      { service_type: 'sortir-family', cost_per_id: 25 },
+      { service_type: 'sortir-polos', cost_per_id: 50 },
       { service_type: 'data-extractor', cost_per_id: 5 },
       { service_type: 'intip-nomor', cost_per_id: 2500 },
       { service_type: 'cek-info-akun', cost_per_id: 100 },

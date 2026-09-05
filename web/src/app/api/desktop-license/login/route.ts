@@ -9,15 +9,13 @@ import {
   APP_SESSION_DAYS,
 } from "@/utils/appLicense";
 import crypto from "crypto";
+import { DESKTOP_EXTRACTOR_SKU } from "@/constants/sku";
 
-// SKU product yang dilayani endpoint ini (Data Extractor desktop).
-export const DESKTOP_EXTRACTOR_SKU = "desktop-extractor";
+export const dynamic = "force-dynamic";
 
 function fail(message: string, code: string, status: number) {
   return NextResponse.json({ error: code, message }, { status });
 }
-
-export const dynamic = "force-dynamic";
 
 // Login berbasis VRTXID + HWID saja (tanpa AppSecret).
 // - Jika bound_hwid ksong -> bind (first login dari device ini).

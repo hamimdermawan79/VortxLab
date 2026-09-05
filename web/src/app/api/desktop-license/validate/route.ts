@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/utils/prisma";
 import { hashValue, normalizeHwid, validHwid } from "@/utils/appLicense";
-import { DESKTOP_EXTRACTOR_SKU } from "../login/route";
+import { DESKTOP_EXTRACTOR_SKU } from "@/constants/sku";
 
 function denied(message: string, code: string, status: number) {
   return NextResponse.json({ error: code, message }, { status });
