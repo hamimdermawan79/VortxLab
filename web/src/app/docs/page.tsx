@@ -121,13 +121,17 @@ export default function ApiDocsPage() {
 
   // Code snippets for Sortir Banned
   const SORTIR_CODE_SAMPLES: Record<CodeLang, string> = {
-    curl: `# 1. Submit Batch Sortir Banned
+    curl: `# 1. Submit Batch Sortir Banned (Mendukung ID Murni maupun Format Akun Lengkap)
 # Webhook otomatis terkirim jika parameter webhook_url disertakan
 curl -X POST "https://vortxlab.my.id/api/sortir-banned" \\
   -H "Authorization: Bearer sk-vrtx-xxxxxxxxxxxxxxxxxxxxxxxx" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "ids": ["12345678", "87654321", "11223344", "99887766"],
+    "ids": [
+      "35906623",
+      "ID: 195723517 PW: AF17E2EE190BB824D2AFA2F8EDC6F1D4 MAC: 46:46:87:5D:D0:D3",
+      "43166085|AF17E2EE190BB8246B470B5491190EE1F8D0|9A:C8:B8:8E:25:CF"
+    ],
     "webhook_url": "https://client-domain.com/api/vortx-webhook"
   }'
 
@@ -148,9 +152,14 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
-# 1. Kirim Batch ID
+# 1. Kirim Batch ID (Bisa ID murni atau format data akun lengkap)
+# VortX otomatis mengekstrak ID saja (Password/MAC tidak pernah disimpan/dikirim)
 payload = {
-    "ids": ["12345678", "87654321", "11223344"],
+    "ids": [
+        "35906623",
+        "ID: 195723517 PW: AF17E2EE190BB824D2AFA2F8EDC6F1D4 MAC: 46:46:87:5D:D0:D3",
+        "43166085|AF17E2EE190BB8246B470B5491190EE1F8D0|9A:C8:B8:8E:25:CF"
+    ],
     "webhook_url": "https://client-domain.com/api/vortx-webhook" # Opsional
 }
 
@@ -171,6 +180,7 @@ const BASE_URL = "https://vortxlab.my.id/api";
 const API_KEY = "sk-vrtx-xxxxxxxxxxxxxxxxxxxxxxxx";
 
 async function submitSortirBanned(ids, webhookUrl) {
+  // ids mendukung array ID murni maupun format akun mentah (ID: ... PW: ... MAC: ...)
   const res = await fetch(\`\${BASE_URL}/sortir-banned\`, {
     method: "POST",
     headers: {
@@ -194,14 +204,22 @@ async function submitSortirBanned(ids, webhookUrl) {
   }
 }
 
-submitSortirBanned(["12345678", "87654321"], "https://client-domain.com/api/vortx-webhook");`,
+submitSortirBanned([
+  "35906623",
+  "ID: 195723517 PW: AF17E2EE190BB824D2AFA2F8EDC6F1D4 MAC: 46:46:87:5D:D0:D3"
+], "https://client-domain.com/api/vortx-webhook");`,
 
     php: `<?php
 $baseUrl = "https://vortxlab.my.id/api";
 $apiKey = "sk-vrtx-xxxxxxxxxxxxxxxxxxxxxxxx";
 
+// Mendukung ID numerik murni maupun format akun mentah
 $payload = json_encode([
-    "ids" => ["12345678", "87654321", "11223344"],
+    "ids" => [
+        "35906623",
+        "ID: 195723517 PW: AF17E2EE190BB824D2AFA2F8EDC6F1D4 MAC: 46:46:87:5D:D0:D3",
+        "43166085|AF17E2EE...|9A:C8:B8:8E:25:CF"
+    ],
     "webhook_url" => "https://client-domain.com/api/vortx-webhook"
 ]);
 
@@ -707,7 +725,11 @@ echo $response;
                       <p className="text-[#71717a]">Content-Type: application/json</p>
                       <pre className="text-[#18181b] pt-2 border-t border-[#e4e4e7]">
 {`{
-  "ids": ["12345678", "87654321", "11223344"],
+  "ids": [
+    "35906623",
+    "ID: 195723517 PW: AF17E2EE... MAC: 46:46:87:5D:D0:D3",
+    "43166085|AF17E2EE...|9A:C8:B8:8E:25:CF"
+  ],
   "webhook_url": "https://client-domain.com/api/vortx-webhook" // Opsional
 }`}
                       </pre>
@@ -731,6 +753,17 @@ echo $response;
                       </pre>
                     </div>
                   </div>
+                </div>
+
+                {/* Security Guarantee & Multi-Format Info */}
+                <div className="p-3 bg-emerald-500/[0.04] border border-emerald-500/20 rounded-xs text-xs text-[#27272a] space-y-1">
+                  <div className="flex items-center gap-1.5 font-semibold text-emerald-800 text-[11px]">
+                    <ShieldCheck size={14} className="text-emerald-600 shrink-0" />
+                    <span>Format Fleksibel &amp; Garansi Privasi 100% Terjaga</span>
+                  </div>
+                  <p className="text-[11px] text-[#52525b] leading-relaxed">
+                    Parameter <code className="bg-white px-1 py-0.5 rounded border border-[#e4e4e7] font-mono text-emerald-800">ids</code> menerima string ID numerik murni maupun format akun mentah (seperti <code className="bg-white px-1 py-0.5 rounded border border-[#e4e4e7] font-mono text-emerald-800">ID: ... PW: ... MAC: ...</code> atau <code className="bg-white px-1 py-0.5 rounded border border-[#e4e4e7] font-mono text-emerald-800">ID|PW|MAC</code>). Mesin VortX secara otomatis mengekstrak ID numerik saja. Password, MAC Address, atau data rahasia lainnya tidak pernah disimpan ataupun dikirim ke server luar.
+                  </p>
                 </div>
 
                 {/* Error Responses Reference */}

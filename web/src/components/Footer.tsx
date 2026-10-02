@@ -93,7 +93,7 @@ export default function Footer() {
               <p className="text-xs text-[#71717a]">Butuh bantuan integrasi atau topup token?</p>
               <div className="flex flex-col gap-2 pt-1">
                 <a
-                  href="https://wa.me/6285768434100"
+                  href="https://wa.me/6281919027336"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 px-3 py-1.5 rounded-xs bg-white border border-[#f7d8c4] text-xs font-semibold text-[#e26d40] hover:border-[#e26d40] transition-colors"

@@ -23,6 +23,8 @@ interface TransactionsTabProps {
 
 const SERVICE_LABELS: Record<string, string> = {
   'sortir-banned': 'Sortir Banned',
+  'sortir-family': 'Sortir Family',
+  'sortir-polos': 'Sortir Polos',
   'data-extractor': 'Data Extractor',
   'extractor': 'Data Extractor',
   'intip-nomor': 'Intip Nomor',
@@ -71,6 +73,8 @@ export function TransactionsTab({
     if (txFilter === "all") return true;
     if (txFilter === "topup") return tx.type === "topup";
     if (txFilter === "sortir-banned") return tx.type === "sortir-banned";
+    if (txFilter === "sortir-family") return tx.type === "sortir-family";
+    if (txFilter === "sortir-polos") return tx.type === "sortir-polos";
     if (txFilter === "data-extractor") return tx.type === "data-extractor" || tx.type === "extractor";
     if (txFilter === "intip-nomor") return tx.type === "intip-nomor";
     if (txFilter === "cek-info-akun") return tx.type === "cek-info-akun";
@@ -115,6 +119,8 @@ export function TransactionsTab({
             <option value="topup">Filter: Topup Saja</option>
             <option value="all">Filter: Semua Tipe</option>
             <option value="sortir-banned">Sortir Banned</option>
+            <option value="sortir-family">Sortir Family</option>
+            <option value="sortir-polos">Sortir Polos</option>
             <option value="data-extractor">Data Extractor</option>
             <option value="intip-nomor">Intip Nomor</option>
             <option value="cek-info-akun">Cek Info Akun</option>

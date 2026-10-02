@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { getUser } from '@/utils/auth';
 import { safeErrorResponse } from '@/utils/security';
+import { getUploadsDir } from '@/utils/uploads';
 import fs from 'fs';
 import path from 'path';
 
@@ -55,7 +56,7 @@ export async function GET() {
     const user = await getUser();
     if (!user || user.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const uploadsDir = path.join(process.cwd(), 'private', 'uploads');
+    const uploadsDir = getUploadsDir();
     const storageStats = getDirStats(uploadsDir);
 
     const now = new Date();
@@ -145,7 +146,7 @@ export async function GET() {
       .sort((a, b) => a.date.localeCompare(b.date));
 
     // Service revenue
-    const activeServicesList = ['sortir-banned', 'data-extractor', 'intip-nomor', 'cek-info-akun'];
+    const activeServicesList = ['sortir-banned', 'sortir-family', 'sortir-polos', 'data-extractor', 'intip-nomor', 'cek-info-akun'];
     const serviceConfigs = await prisma.service_configs.findMany({
       select: { service_type: true, cost_per_id: true }
     });

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Coins, X, CheckCircle2, ShieldCheck, FolderArchive, Phone, UserCheck } from "lucide-react";
+import { Coins, X, CheckCircle2, ShieldCheck, FolderArchive, Phone, UserCheck, Users, CircleUser } from "lucide-react";
 
 interface PricingModalProps {
   serviceCosts: any[];
@@ -19,6 +19,16 @@ const SERVICE_LABELS: Record<string, { label: string; desc: string; icon: any }>
     label: 'Sortir Banned (Calling REST API)',
     desc: 'Biaya komputasi pemilahan akun via API Key / Reseller per ID',
     icon: ShieldCheck
+  },
+  'sortir-family': {
+    label: 'Sortir Family',
+    desc: 'Biaya pemilahan akun member & non-member family per ID',
+    icon: Users
+  },
+  'sortir-polos': {
+    label: 'Sortir Polos',
+    desc: 'Biaya pemilahan akun polos & tidak polos per ID',
+    icon: CircleUser
   },
   'data-extractor': {
     label: 'Data Extractor',

@@ -27,6 +27,8 @@ web/private/uploads/
 web/.env
 web/.env*.local
 web/.env.local
+proxies.txt
+daemons/proxies.txt
 
 # Python
 .venv/
@@ -53,6 +55,12 @@ pnpm-debug.log*
 .gemini/
 .vscode/
 .idea/
+
+# Build Products
+build-products/
+
+# Scratch / temp
+scratch/
 
 # OS Files
 .DS_Store

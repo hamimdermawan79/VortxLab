@@ -1,0 +1,286 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0d10;
+    --surface: #14181d;
+    --surface-2: #1b2026;
+    --border: #2a3138;
+    --border-strong: #3a434c;
+    --text: #e8edf2;
+    --text-dim: #9aa6b2;
+    --text-faint: #6b7682;
+    --accent: #e26d40;
+    --accent-dim: #b8582f;
+    --good: #4ade80;
+    --warn: #fbbf24;
+    --crit: #f87171;
+    --code-bg: #0f1216;
+    --maxw: 920px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f7f5f2;
+      --surface: #ffffff;
+      --surface-2: #f3f0ec;
+      --border: #e6e1da;
+      --border-strong: #d3ccc2;
+      --text: #1c1f23;
+      --text-dim: #5c6470;
+      --text-faint: #8a929e;
+      --accent: #c45a2e;
+      --accent-dim: #a04a23;
+      --code-bg: #f0ede8;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0d10; --surface: #14181d; --surface-2: #1b2026;
+    --border: #2a3138; --border-strong: #3a434c; --text: #e8edf2;
+    --text-dim: #9aa6b2; --text-faint: #6b7682; --accent: #e26d40;
+    --accent-dim: #b8582f; --code-bg: #0f1216;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  .shell { max-width: var(--maxw); margin: 0 auto; padding: 48px 24px 96px; }
+  header.lead { border-bottom: 1px solid var(--border); padding-bottom: 28px; margin-bottom: 40px; }
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent);
+    margin: 0 0 14px;
+  }
+  h1 { font-size: 34px; font-weight: 800; line-height: 1.1; margin: 0 0 14px; letter-spacing: -0.02em; text-wrap: balance; }
+  .lead p.sub { color: var(--text-dim); font-size: 15px; margin: 0; max-width: 62ch; }
+
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 12px; margin-top: 22px; }
+  .meta-cell { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; }
+  .meta-cell .k { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-faint); }
+  .meta-cell .v { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text); margin-top: 4px; word-break: break-all; }
+
+  h2 {
+    font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-dim); margin: 56px 0 0; padding-bottom: 10px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  h2 .num {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    padding: 2px 8px; border-radius: 4px; font-weight: 600;
+  }
+  h3 { font-size: 16px; font-weight: 600; margin: 28px 0 10px; color: var(--text); }
+
+  p { margin: 12px 0; color: var(--text); }
+  p.note { color: var(--text-dim); font-size: 14px; }
+
+  .callout {
+    border-radius: 6px; padding: 14px 16px; margin: 18px 0;
+    font-size: 14px; line-height: 1.55;
+  }
+  .callout.crit { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 35%, transparent); }
+  .callout.warn { background: color-mix(in srgb, var(--warn) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent); }
+  .callout.good { background: color-mix(in srgb, var(--good) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); }
+  .callout .tag {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase; display: block; margin-bottom: 6px;
+  }
+  .callout.crit .tag { color: var(--crit); }
+  .callout.warn .tag { color: var(--warn); }
+  .callout.good .tag { color: var(--good); }
+  .callout code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; font-size: 12.5px; }
+
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 16px 18px; overflow-x: auto; margin: 14px 0 0;
+    font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.65;
+    color: #d4dce4;
+  }
+  pre .cm { color: var(--text-faint); }
+  pre .pv { color: var(--accent); }
+  pre .kw { color: #7dd3fc; }
+  pre .st { color: #86efac; }
+  pre code { font: inherit; }
+
+  .cmd {
+    display: flex; align-items: flex-start; gap: 0; margin: 12px 0;
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px;
+    overflow: hidden;
+  }
+  .cmd .prompt {
+    flex: 0 0 auto; padding: 12px 10px 12px 16px; color: var(--accent);
+    font-family: 'JetBrains Mono', monospace; font-size: 13px; user-select: none;
+    border-right: 1px solid var(--border); background: color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+  .cmd .body {
+    flex: 1; padding: 12px 16px; font-family: 'JetBrains Mono', monospace;
+    font-size: 13px; color: var(--text); overflow-x: auto; white-space: nowrap;
+  }
+
+  .checklist { list-style: none; padding: 0; margin: 16px 0 0; display: flex; flex-direction: column; gap: 10px; }
+  .checklist li { display: flex; gap: 12px; align-items: flex-start; font-size: 14px; color: var(--text); }
+  .checklist .box {
+    flex: 0 0 18px; width: 18px; height: 18px; margin-top: 2px;
+    border: 1.5px solid var(--border-strong); border-radius: 4px;
+  }
+  .checklist code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; font-size: 12.5px; }
+
+  .rollback { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 18px 20px; margin-top: 14px; }
+  .rollback h4 { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--crit); }
+
+  .foot { margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--border); color: var(--text-faint); font-size: 12px; font-family: 'JetBrains Mono', monospace; }
+  .var { color: var(--warn); font-style: normal; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+</style>
+<title>VortXlab VPS Redeploy Runbook</title>
+
+<header class="lead">
+  <p class="eyebrow">Runbook · Security Fix Deployment</p>
+  <h1>VPS Redeploy — VortXlab.my.id</h1>
+  <p class="sub">Langkah-langkah menerapkan branch <span class="mono">Production</span> setelah merge security-fix. Target: menghapus kebocoran hardcoded secret salt, isolasi file upload, hashing API key, dan patch 14 celah keamanan.</p>
+  <div class="meta-grid">
+    <div class="meta-cell"><div class="k">Branch deploy</div><div class="v">Production</div></div>
+    <div class="meta-cell"><div class="k">Build mode</div><div class="v">standalone</div></div>
+    <div class="meta-cell"><div class="k">Stack</div><div class="v">Next.js · Prisma · PostgreSQL</div></div>
+    <div class="meta-cell"><div class="k">Commit target</div><div class="v">f889f04</div></div>
+  </div>
+</header>
+
+<h2><span class="num">00</span> Sebelum mulai</h2>
+<p class="note">Pastikan agent Claude Code di VPS punya akses: git, Node 18+, dan service user yang menjalankan app. Ganti semua nilai <span class="var">&lt;di-dalam-kurung&gt;</span> dengan milik Anda. Pastikan ada backup database sebelum <span class="mono">db push</span>.</p>
+
+<div class="callout crit">
+  <span class="tag">Wajib — sekali jalan</span>
+  Jalankan perintah rotasi secret di <b>Langkah 5</b>. Secret lama (<span class="mono">LICENSE_SIGNING_SECRET</span> yang hardcoded) sudah bocor di git history — tidak boleh dipakai lagi. Tanpa rotasi, kebocoran tetap aktif meski kode diperbarui.
+</div>
+
+<h2><span class="num">01</span> Akses & hentikan service</h2>
+<p>SSH ke VPS, masuk ke direktori app, hentikan process manager supaya build tidak konflik dengan file yang sedang di-serve.</p>
+
+<div class="cmd"><div class="prompt">$</div><div class="body">ssh <span class="var">&lt;user&gt;</span>@<span class="var">&lt;vps-ip&gt;</span></div></div>
+<div class="cmd"><div class="prompt">$</div><div class="body">cd <span class="var">&lt;/path/to/app&gt;</span></div></div>
+
+<p class="note">Hentikan sesuai process manager yang Anda pakai. Contoh PM2:</p>
+<div class="cmd"><div class="prompt">$</div><div class="body">pm2 stop vortx-web   <span style="color:var(--text-faint)"># ganti nama process sesuai Anda</span></div></div>
+<p class="note">Atau kalau pakai systemd:</p>
+<div class="cmd"><div class="prompt">$</div><div class="body">sudo systemctl stop vortx-web</div></div>
+
+<h2><span class="num">02</span> Backup database</h2>
+<div class="callout warn">
+  <span class="tag">Jangan dilewati</span>
+  <p><span class="mono">prisma db push</span> mengubah skema <span class="mono">api_keys</span> (kolom <span class="mono">key</span> jadi nullable, kolom baru <span class="mono">key_hash</span>). Backup dulu.</p>
+</div>
+<div class="cmd"><div class="prompt">$</div><div class="body">pg_dump "$DATABASE_URL" -F c -f ~/vortx_backup_$(date +%Y%m%d_%H%M).dump</div></div>
+<div class="cmd"><div class="prompt">$</div><div class="body">ls -lh ~/vortx_backup_*.dump   <span style="color:var(--text-faint)"># verifikasi file ada &gt;0</span></div></div>
+
+<h2><span class="num">03</span> Pull branch Production</h2>
+<p>Tarik branch Production terbaru yang sudah berisi security-fix.</p>
+<div class="cmd"><div class="prompt">$</div><div class="body">git fetch origin</div></div>
+<div class="cmd"><div class="prompt">$</div><div class="body">git checkout Production</div></div>
+<div class="cmd"><div class="prompt">$</div><div class="body">git pull origin Production</div></div>
+<div class="cmd"><div class="prompt">$</div><div class="body">git log --oneline -3   <span style="color:var(--text-faint)"># konfirmasi f889f04 ada di atas</span></div></div>
+
+<div class="callout warn">
+  <span class="tag">Verifikasi merge</span>
+  HEAD harus <span class="mono">f889f04</span>. Kalau bukan, berarti push dari lokal belum sampai — jalankan dari mesin lokal: <code>git -C /c/Project/VortXLabs1.2 push origin Production</code> lalu ulangi <code>git pull</code> di VPS.
+</div>
+
+<h2><span class="num">04</span> Pindahkan upload lama ke private/</h2>
+<p>File upload kini diserve lewat route auth (<span class="mono">/api/admin/files/download</span>), bukan static lagi. Pindahkan folder lama supaya file kredensial tidak exposed langsung oleh reverse proxy.</p>
+<div class="cmd"><div class="prompt">$</div><div class="body">cd <span class="var">&lt;/path/to/app&gt;</span>/web</div></div>
+<div class="cmd"><div class="prompt">$</div><div class="body">mkdir -p private</div></div>
+<div class="cmd"><div class="prompt">$</div><div class="body">[ -d public/uploads ] && mv public/uploads private/uploads && echo "moved" || echo "sudah kosong / sudah ada"</div></div>
+<div class="cmd"><div class="prompt">$</div><div class="body">ls private/uploads/data 2>/dev/null | head -3   <span style="color:var(--text-faint)"># cek isinya ikut pindah</span></div></div>
+
+<div class="callout crit">
+  <span class="tag">Nginx / reverse proxy</span>
+  <p>Pastikan TIDAK ada directive yang static-serve <span class="mono">/private/</span>. Hanya <span class="mono">public/</span> boleh di-expose sebagai root. Contoh blok yang <b>benar</b> hanya mendelegasikan ke Next:</p>
+<pre><code>location / {
+  proxy_pass http://127.0.0.1:3000;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-Proto $scheme;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}</code></pre>
+<p style="margin-top:8px">Jangan tambahkan <span class="mono">root .../public</span> yang menangkap <span class="mono">/private</span>.</p>
+</div>
+
+<h2><span class="num">05</span> Rotasi LICENSE_SIGNING_SECRET (wajib)</h2>
+<p>Generate secret baru, tulis ke <span class="mono">.env</span>. Jangan commit file <span class="mono">.env</span>.</p>
+<div class="cmd"><div class="prompt">$</div><div class="body">NEW_SECRET=$(openssl rand -hex 32)</div></div>
+<div class="cmd"><div class="prompt">$</div><div class="body">echo "LICENSE_SIGNING_SECRET=$NEW_SECRET" >> web/.env</div></div>
+<div class="cmd"><div class="prompt">$</div><div class="body">grep -c LICENSE_SIGNING_SECRET web/.env   <span style="color:var(--text-faint)"># harus &gt;=1</span></div></div>
+<p class="note">Catat secret ini di password manager. Lisensi app lama yang ditandatangani pakai secret lama akan gagal validasi — regenerate via panel admin bila perlu.</p>
+
+<h2><span class="num">06</span> Update dependency & generate Prisma client</h2>
+<div class="cmd"><div class="prompt">$</div><div class="body">cd <span class="var">&lt;/path/to/app&gt;</span>/web</div></div>
+<div class="cmd"><div class="prompt">$</div><div class="body">npm ci   <span style="color:var(--text-faint)"># install persis dari lockfile</span></div></div>
+<div class="cmd"><div class="prompt">$</div><div class="body">npx prisma generate</div></div>
+
+<h2><span class="num">07</span> Apply skema ke database</h2>
+<div class="cmd"><div class="prompt">$</div><div class="body">npx prisma db push</div></div>
+<p class="note">Akan menambah kolom <span class="mono">key_hash</span> (unique) + index, membuat <span class="mono">key</span> nullable. Data lama tidak hilang — key plaintext lama tetap di kolom <span class="mono">key</span>, dual-lookup aktif.</p>
+
+<h2><span class="num">08</span> Build</h2>
+<div class="cmd"><div class="prompt">$</div><div class="body">npm run build</div></div>
+<p class="note"><span class="mono">output: "standalone"</span> menghasilkan <span class="mono">.next/standalone</span> (server.js mandiri) + <span class="mono">.next/static</span>. Untuk deploy standalone, salin hasilnya keluar:</p>
+<pre><code><span class="cm"># setup standalone (sekali, lalu tiap rebuild refresh)</span>
+<span class="kw">mkdir -p</span> <span class="st">.next/standalone/public</span>
+<span class="kw">cp -r</span> public/* <span class="st">.next/standalone/public/</span> 2>/dev/null <span class="cm">|| true</span>
+<span class="kw">mkdir -p</span> <span class="st">.next/standalone/private</span>
+<span class="kw">cp -r</span> private/* <span class="st">.next/standalone/private/</span> 2>/dev/null <span class="cm">|| true</span>
+<span class="kw">cp -r</span> .next/static <span class="st">.next/standalone/.next/static</span></code></pre>
+
+<h2><span class="num">09</span> Jalankan kembali service</h2>
+<p>Contoh PM2 (ganti <span class="mono">NODE_ENV</span> dan port sesuai setup Anda):</p>
+<pre><code><span class="kw">pm2 start</span> .next/standalone/server.js \
+  --name vortx-web \
+  --env production \
+  -- <span class="pv">3000</span>
+
+<span class="cm"># atau restart kalau sudah pernah didaftarkan:</span>
+<span class="kw">pm2 restart</span> vortx-web
+
+<span class="kw">pm2 save</span></code></pre>
+<p class="note">systemd alternatif — pastikan <span class="mono">WorkingDirectory</span> = <span class="mono">.next/standalone</span> dan <span class="mono">EnvironmentFile</span> = <span class="mono">.env</span>.</p>
+
+<h2><span class="num">10</span> Verifikasi post-deploy</h2>
+<ul class="checklist">
+  <li><div class="box"></div><div>App live: <code>curl -sI https://vortxlab.my.id | head -1</code> → <code>200/3xx</code></div></li>
+  <li><div class="box"></div><div>HSTS header ada: <code>curl -sI https://vortxlab.my.id | grep -i strict-transport</code></div></li>
+  <li><div class="box"></div><div><code>/private/</code> tidak accessible: <code>curl -sI https://vortxlab.my.id/private/uploads/data/x.conf</code> → <code>404</code> (bukan 200)</div></li>
+  <li><div class="box"></div><div>Webhook Cashi masih receive (test callback dari dashboard Cashi)</div></li>
+  <li><div class="box"></div><div>Login brute-force: coba login salah 5× → akun terkunci 15 menit</div></li>
+  <li><div class="box"></div><div>Register password &lt;8 char ditolak (400)</div></li>
+  <li><div class="box"></div><div>API key lama masih jalan (dual-lookup) — client tidak perlu update dulu</div></li>
+</ul>
+
+<h2><span class="num">11</span> Regen API key (opsional tapi disarankan)</h2>
+<p>Legacy key plaintext masih di kolom <span class="mono">key</span>. Kalau DB bocor, key itu kelihatan. Regen via UI dashboard untuk migrasi ke hash-only, lalu update client.</p>
+<ol style="color:var(--text-dim);font-size:14px;line-height:1.8">
+  <li>Login dashboard → tab API Key → <b>Re-generate Key</b></li>
+  <li>Salin key baru <span class="mono">sk-vrtx-…</span> (hanya tampil sekali)</li>
+  <li>Update semua client/bot pakai key baru</li>
+  <li>Setelah yakin semua bermigrasi, bisa <code>npx prisma db execute</code> untuk null-kan kolom <span class="mono">key</span> sisa legacy</li>
+</ol>
+
+<div class="rollback">
+  <h4>Rollback (jika rusak)</h4>
+<pre><code><span class="cm"># 1. restore DB</span>
+<span class="kw">pg_restore</span> -d "$DATABASE_URL" -F c -c ~/vortx_backup_<span class="var">&lt;timestamp&gt;</span>.dump
+
+<span class="cm"># 2. kembalikan commit sebelum security-fix</span>
+<span class="kw">git checkout</span> Production
+<span class="kw">git reset</span> --hard 6d1a939
+<span class="kw">npm ci</span> && <span class="kw">npx prisma generate</span> && <span class="kw">npm run build</span>
+<span class="kw">pm2 restart</span> vortx-web
+
+<span class="cm"># 3. kembalikan folder upload ke public/ bila perlu</span>
+<span class="kw">mv</span> private/uploads public/uploads</code></pre>
+</div>
+
+<div class="foot">
+  Runbook · security-fix → Production · commit f889f04<br>
+  Ganti semua &lt;placeholder&gt; · jalankan urut · backup sebelum db push
+</div>

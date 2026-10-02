@@ -13,6 +13,8 @@ export async function GET() {
     const defaults: Record<string, number> = {
       'sortir-banned': 20,
       'sortir-banned-api': 20,
+      'sortir-family': 25,
+      'sortir-polos': 50,
       'data-extractor': 5,
       'intip-nomor': 2500,
       'cek-info-akun': 100,

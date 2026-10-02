@@ -134,6 +134,19 @@ export default function AdminPage() {
     loadAll();
   };
 
+  const updateProduct = async (sku: string, updates: any) => {
+    try {
+      await fetch("/api/admin/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sku, updates }),
+      });
+      setProducts((prev) => prev.map((p) => (p.sku === sku ? { ...p, ...updates } : p)));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const updateCost = async (serviceType: string, cost: number) => {
     await fetch("/api/admin/service-configs", {
       method: "PATCH",
@@ -313,6 +326,7 @@ export default function AdminPage() {
       {showProductsModal && (
         <ProductsModal
           products={products}
+          updateProduct={updateProduct}
           onClose={() => setShowProductsModal(false)}
         />
       )}

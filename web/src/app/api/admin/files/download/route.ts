@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUser } from "@/utils/auth";
 import { safeErrorResponse } from "@/utils/security";
+import { getUploadsDir } from "@/utils/uploads";
 import fs from "fs";
 import path from "path";
 
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "MISSING_FILE", message: "Parameter file diperlukan." }, { status: 400 });
     }
 
-    const uploadsDir = path.join(process.cwd(), "private", "uploads");
+    const uploadsDir = getUploadsDir();
     const safePath = path.normalize(path.join(uploadsDir, relPath));
 
     if (!safePath.startsWith(uploadsDir)) {
